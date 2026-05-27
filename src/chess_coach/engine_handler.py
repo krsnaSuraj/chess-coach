@@ -22,6 +22,24 @@ class EngineHandler(QObject):
         self.analysis_thread: AnalysisThread | None = None
         self.pending_board: chess.Board | None = None
 
+    def _ensure_engine_alive(self) -> bool:
+        if self.engine is None:
+            return False
+        try:
+            self.engine.ping()
+            return True
+        except Exception:
+            logger.warning("Engine not responding, restarting")
+            self._restart_engine()
+            return self.engine is not None
+
+    def _restart_engine(self) -> None:
+        try:
+            self.engine = None
+            self.start_engine()
+        except Exception as e:
+            self.error_occurred.emit(str(e))
+
     def start_engine(self) -> None:
         try:
             if not os.path.exists(self.engine_path):
@@ -58,7 +76,7 @@ class EngineHandler(QObject):
             self.engine = None
 
     def start_analysis(self, board: chess.Board) -> None:
-        if not self.engine:
+        if not self._ensure_engine_alive():
             self.error_occurred.emit("Engine not started")
             return
         snapshot = board.copy()
@@ -86,6 +104,7 @@ class EngineHandler(QObject):
             return
         self.analysis_thread = AnalysisThread(self.engine, board, self.config)
         self.analysis_thread.info_received.connect(self.analysis_update.emit)
+        self.analysis_thread.error_occurred.connect(self.error_occurred.emit)
         self.analysis_thread.finished.connect(self._on_thread_finished)
         self.analysis_thread.start()
 
@@ -98,6 +117,7 @@ class EngineHandler(QObject):
 
 class AnalysisThread(QThread):
     info_received = pyqtSignal(dict)
+    error_occurred = pyqtSignal(str)
 
     def __init__(
         self, engine: chess.engine.SimpleEngine, board: chess.Board, config: dict
@@ -107,20 +127,18 @@ class AnalysisThread(QThread):
         self.board = board
         self.config = config
         self.is_running = True
-        self._analysis: chess.engine.AnalysisResult | None = None
 
     def run(self) -> None:
         try:
             with self.engine.analysis(self.board) as analysis:
-                self._analysis = analysis
                 for info in analysis:
                     if not self.is_running:
                         break
                     self.info_received.emit(info)
         except Exception as e:
             logger.error("Analysis error: %s", e)
+            self.error_occurred.emit(f"Analysis crashed: {e}")
         finally:
-            self._analysis = None
             self.is_running = False
 
     def stop(self) -> None:

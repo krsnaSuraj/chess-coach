@@ -60,6 +60,7 @@ class MainWindow(QMainWindow):
         self._heartbeat.timeout.connect(self._heartbeat_check)
         self._heartbeat.setInterval(2000)
         self._heartbeat.start()
+        self._last_analysis_restart: float = 0.0
 
         self._setup_ui()
         self.dashboard.set_eval_bar_gradient(self.board_flipped)
@@ -492,6 +493,8 @@ class MainWindow(QMainWindow):
             if self.analyzing_fen and self.analyzing_fen != self.board.fen():
                 return
 
+            self.analysis_received = True
+
             score = info.get("score")
             if not score:
                 return
@@ -725,9 +728,19 @@ class MainWindow(QMainWindow):
         if self.analysis_received:
             self.analysis_received = False
             return
-        if self.last_known_move:
-            self.chess_board.set_best_move(self.last_known_move)
-            self.dashboard.lbl_best.setText(f"{self.last_known_move.uci()} (cached)")
+        alive = (
+            self.engine_handler.analysis_thread
+            and self.engine_handler.analysis_thread.isRunning()
+        )
+        if alive:
+            if self.last_known_move:
+                self.chess_board.set_best_move(self.last_known_move)
+                self.dashboard.lbl_best.setText(f"{self.last_known_move.uci()} (cached)")
+        else:
+            now = time.time()
+            if now - self._last_analysis_restart > 3.0:
+                self._last_analysis_restart = now
+                self.run_analysis()
 
     def _on_engine_error(self, msg: str) -> None:
         QMessageBox.warning(self, "Engine Error", msg)

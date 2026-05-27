@@ -45,6 +45,23 @@ def get_engine() -> chess.engine.SimpleEngine | None:
                 except Exception as e:
                     logger.error(f"Failed to start engine: {e}")
                     return None
+    else:
+        try:
+            _engine.ping()
+        except Exception:
+            logger.warning("Engine not responding, restarting")
+            with _engine_lock:
+                if _engine:
+                    try:
+                        _engine.quit()
+                    except Exception:
+                        pass
+                    _engine = None
+                try:
+                    _engine = chess.engine.SimpleEngine.popen_uci(ENGINE_PATH)
+                except Exception as e:
+                    logger.error(f"Failed to restart engine: {e}")
+                    return None
     return _engine
 
 
