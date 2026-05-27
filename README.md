@@ -88,7 +88,7 @@ Chess Coach is a professional real-time chess analysis sidekick that integrates 
   <tr>
     <td>
       <h4>⚙️ Configurable Engine</h4>
-      Tweak Stockfish threads, hash size, analysis time via <code>config.yaml</code>. Thread-safe initialization, pre-bound socket (no TOCTOU race).
+       Tweak Stockfish threads, hash size, analysis time via <code>config.yaml</code>. Thread-safe initialization with double-checked locking.
     </td>
     <td>
       <h4>🖌️ Premium UI</h4>
@@ -278,9 +278,9 @@ graph TB
 chess-coach/
 │
 ├── src/chess_coach/              # Python package
-│   ├── __init__.py               # Public API exports (19 symbols: 5 config + 2 game + 3 ECO + 4 GUI + 2 server + 3 PGN)
+│   ├── __init__.py               # Public API exports (19 symbols: 4 config + 2 game + 2 ECO + 6 GUI + 2 server + 3 PGN)
 │   ├── __main__.py               # CLI entry: python -m chess_coach [web]
-│   ├── config.py                 # YAML loader, pre-bound socket port, IP lookup
+│   ├── config.py                 # YAML loader, port probe, IP lookup
 │   ├── game_controller.py        # Shared game state, undo/redo, phases, cache
 │   ├── engine_handler.py         # Stockfish 18 UCI wrapper (QObject + QThread)
 │   ├── chess_board.py            # Board widget: drag-drop, highlights, arrows, 150ms animation
@@ -318,7 +318,7 @@ chess-coach/
 |-------|-----------|------|
 | **Language** | Python 3.10+ | Core logic and glue |
 | **Desktop UI** | PyQt6 | Native chess board, drag-drop, glass sidebar, piece animation |
-| **Web Framework** | FastAPI + Uvicorn | REST API, static serving, CORS, pre-bound sockets |
+| **Web Framework** | FastAPI + Uvicorn | REST API, static serving, CORS |
 | **Engine Protocol** | python-chess (`chess.engine`) | UCI communication with Stockfish |
 | **Engine** | Stockfish 18 | Position evaluation, best move, PV extraction |
 | **Web Frontend** | chessboard.js + chess.js | Browser-based board interaction |
@@ -326,7 +326,7 @@ chess-coach/
 | **Sound** | PyQt6.QtMultimedia (QSoundEffect) | Move click sound (auto-generated WAV) |
 | **AI/Detection** | ECO database (500 entries) | Opening name recognition via longest-prefix match |
 | **Configuration** | PyYAML | `config.yaml` parsing with type validation |
-| **Testing** | pytest, mocktail | 68 tests, 8 test categories |
+| **Testing** | pytest | 68 tests, 10 test classes |
 
 ---
 

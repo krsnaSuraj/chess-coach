@@ -46,8 +46,8 @@ graph TB
     end
 
     subgraph Desktop["Desktop Layer — PyQt6"]
-        MW["main_window.py<br/>QMainWindow · 741 lines"]
-        CB["chess_board.py<br/>QWidget · 485 lines"]
+        MW["main_window.py<br/>QMainWindow · 738 lines"]
+        CB["chess_board.py<br/>QWidget · 486 lines"]
         CD["coach_dashboard.py<br/>QFrame · 220 lines"]
         PD["promotion_dialog.py<br/>QDialog · Underpromotion"]
         SM["sound_manager.py<br/>WAV · QSoundEffect"]
@@ -59,7 +59,7 @@ graph TB
     end
 
     subgraph Web["Web Layer — FastAPI"]
-        SV["server.py<br/>FastAPI · 230 lines"]
+        SV["server.py<br/>FastAPI · 229 lines"]
         API["REST Endpoints<br/>6 routes"]
         STATIC["Static Frontend<br/>chessboard.js + chess.js"]
         SV --> API & STATIC
@@ -112,7 +112,7 @@ def main() -> None:
 
 ```
 load_config(path)        → Raises ConfigError on YAML/validation failure
-find_free_port(start=8000) → tuple[bound_socket, port]  # Pre-bound, TOCTOU-safe
+find_free_port(start=8000) → tuple[bound_socket, port]  # Probes port, caller closes before uvicorn
 get_local_ip()           → str  # LAN IP via UDP connect (8.8.8.8:80)
 ```
 
@@ -378,7 +378,7 @@ PromotionDialog(QDialog):
 **Design decisions:**
 - **Blocking analysis** (not streaming) — simpler for web clients
 - **Thread-safe** — `GameController.lock` (RLock) + `_engine_lock` (double-checked locking)
-- **Pre-bound socket** — `find_free_port()` returns bound socket, eliminating TOCTOU race
+- **Port probe** — `find_free_port()` finds free port, socket closed before `uvicorn.run()`
 - **Static caching disabled** — `_NoCacheStaticFiles` sets `Cache-Control: no-cache`
 - **Analysis cache** — `cached_fen`/`cached_coach` avoids redundant engine calls
 - **Promotion support** — `HumanMoveRequest.promotion` field constructs full UCI
@@ -615,7 +615,7 @@ pytest -k "undo"                # Filter by keyword
 | **Multimedia missing** | `ImportError` for `QSoundEffect` | Graceful degrade — `_HAS_SOUND = False` |
 | **Invalid config YAML** | `yaml.safe_load()` exception | `ConfigError` with descriptive message |
 | **Invalid config values** | Type-checking per key | `ConfigError` with `type(val).__name__` in message |
-| **TOCTOU port race** | `find_free_port()` | Pre-bound socket passed to uvicorn |
+| **TOCTOU port race** | `find_free_port()` probe + close + `uvicorn.run()` | Small race window between close and bind |
 | **Thread race (analysis)** | Multiple `start_analysis()` calls | Pending board + thread finished signal chain |
 | **Thread race (engine init)** | `get_engine()` from multiple threads | Double-checked locking with `_engine_lock` |
 | **Undo after game over** | Game phase check | Allowed — `game_phase in (PLAYING, GAME_OVER)` |
