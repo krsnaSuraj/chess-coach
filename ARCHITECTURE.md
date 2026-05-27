@@ -139,11 +139,11 @@ class GameController:
 
 ```mermaid
 graph LR
-    A["AWAITING_COLOR"] -->|start_game()| B["PLAYING"]
-    B -->|checkmate/stalemate| C["GAME_OVER"]
-    C -->|undo()| B
-    B -->|undo()| B
-    B -->|redo()| B
+    A["AWAITING_COLOR"] -->|start_game| B["PLAYING"]
+    B -->|"checkmate / stalemate"| C["GAME_OVER"]
+    C -->|undo| B
+    B -->|undo| B
+    B -->|redo| B
 ```
 
 **Key methods:**
