@@ -461,8 +461,7 @@ class ChessBoard(QWidget):
 
             legal_move = legal[0]
             if legal_move.promotion:
-                piece = self.board.piece_at(self.dragged_square)
-                color = piece.color if piece else legal_move.promotion
+                color = self.dragged_piece.color
                 dialog = PromotionDialog(color, self)
                 if dialog.exec():
                     legal_move = chess.Move(

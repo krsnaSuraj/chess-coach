@@ -20,7 +20,7 @@ from chess_coach.coach_dashboard import CoachDashboard
 from chess_coach.eco_handler import get_opening
 from chess_coach.engine_handler import EngineHandler
 from chess_coach.sound_manager import SoundManager
-from chess_coach.pgn_handler import board_to_pgn
+from chess_coach.pgn_handler import board_to_pgn, pgn_to_moves
 
 logger = logging.getLogger(__name__)
 
