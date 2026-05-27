@@ -26,8 +26,10 @@ stockfish.exe
 stockfish
 bin/
 
-# Temp test files
+# Temp test files (but not __main__.py / __init__.py)
 _*.py
+!_*main*.py
+!_*init*.py
 _*.ps1
 ._*.tmp
 ._*.txt

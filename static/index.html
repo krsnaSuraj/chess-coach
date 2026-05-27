@@ -132,10 +132,10 @@
  <div id="promoModal" class="modal-overlay hidden">
      <h2>Promote Pawn</h2>
      <div style="display:flex; gap:12px; flex-wrap:wrap; justify-content:center;">
-         <button class="color-btn" style="min-width:80px; padding:12px 20px; font-size:2rem;" onclick="choosePromotion('q')">♛</button>
-         <button class="color-btn" style="min-width:80px; padding:12px 20px; font-size:2rem;" onclick="choosePromotion('r')">♜</button>
-         <button class="color-btn" style="min-width:80px; padding:12px 20px; font-size:2rem;" onclick="choosePromotion('b')">♝</button>
-         <button class="color-btn" style="min-width:80px; padding:12px 20px; font-size:2rem;" onclick="choosePromotion('n')">♞</button>
+         <button id="promoQ" class="color-btn" style="min-width:80px; padding:12px 20px; font-size:2rem;" onclick="choosePromotion('q')"></button>
+         <button id="promoR" class="color-btn" style="min-width:80px; padding:12px 20px; font-size:2rem;" onclick="choosePromotion('r')"></button>
+         <button id="promoB" class="color-btn" style="min-width:80px; padding:12px 20px; font-size:2rem;" onclick="choosePromotion('b')"></button>
+         <button id="promoN" class="color-btn" style="min-width:80px; padding:12px 20px; font-size:2rem;" onclick="choosePromotion('n')"></button>
      </div>
  </div>
 
@@ -212,13 +212,25 @@ checkHealth().catch(() => {});
      return true;
  }
 
+function cancelPromotion() {
+    hidePromoDialog();
+    if (!STATE.pendingMove) return;
+    STATE.game.undo();
+    STATE.board.position(STATE.game.fen());
+    STATE.pendingMove = null;
+}
+
 async function onDrop(source, target) {
     const piece = STATE.game.get(source);
-    const isPromotion = piece && piece.type === 'p' && (target[1] === '8' || target[1] === '1');
+    if (!piece) return 'snapback';
+
+    const playerRank = STATE.isWhite ? '8' : '1';
+    const isPromotion = piece.type === 'p' && target[1] === playerRank;
 
     if (isPromotion) {
         STATE.pendingMove = { from: source, to: target };
-        document.getElementById('promoModal').classList.remove('hidden');
+        STATE.game.move({ from: source, to: target, promotion: 'q' });
+        showPromoDialog();
         return;
     }
 
@@ -228,12 +240,28 @@ async function onDrop(source, target) {
     await submitMove(moveObj);
 }
 
-function choosePromotion(piece) {
+function showPromoDialog() {
+    const whitePieces = ['♕', '♖', '♗', '♘'];
+    const blackPieces = ['♛', '♜', '♝', '♞'];
+    const pieces = STATE.isWhite ? whitePieces : blackPieces;
+    document.getElementById('promoQ').textContent = pieces[0];
+    document.getElementById('promoR').textContent = pieces[1];
+    document.getElementById('promoB').textContent = pieces[2];
+    document.getElementById('promoN').textContent = pieces[3];
+    document.getElementById('promoModal').classList.remove('hidden');
+}
+
+function hidePromoDialog() {
     document.getElementById('promoModal').classList.add('hidden');
+}
+
+function choosePromotion(piece) {
+    hidePromoDialog();
     const pm = STATE.pendingMove;
     STATE.pendingMove = null;
     if (!pm) return;
 
+    STATE.game.undo();
     const moveObj = STATE.game.move({ from: pm.from, to: pm.to, promotion: piece });
     if (moveObj === null) {
         STATE.board.position(STATE.game.fen());
@@ -356,6 +384,7 @@ function processResponse(data) {
  }
 
 document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && STATE.pendingMove) { e.preventDefault(); cancelPromotion(); return; }
     if (e.ctrlKey && e.key === 'z') { e.preventDefault(); undoMove(); }
     if (e.ctrlKey && e.key === 'y') { e.preventDefault(); redoMove(); }
     if (e.ctrlKey && e.key === 'n') { e.preventDefault(); location.reload(); }
@@ -363,8 +392,7 @@ document.addEventListener('keydown', function(e) {
 
 async function undoMove() {
     if (STATE.busy) return;
-    document.getElementById('promoModal').classList.add('hidden');
-    STATE.pendingMove = null;
+    if (STATE.pendingMove) { cancelPromotion(); return; }
     STATE.busy = true;
     try {
         const data = await apiCall('/api/undo', {});
@@ -375,8 +403,7 @@ async function undoMove() {
 
 async function redoMove() {
     if (STATE.busy) return;
-    document.getElementById('promoModal').classList.add('hidden');
-    STATE.pendingMove = null;
+    if (STATE.pendingMove) { cancelPromotion(); return; }
     STATE.busy = true;
     try {
         const data = await apiCall('/api/redo', {});

@@ -49,11 +49,12 @@ def find_free_port(start: int = 8000) -> tuple["socket.socket", int]:
         sock.bind(("0.0.0.0", start))
         return sock, start
     except OSError:
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        sock.bind(("0.0.0.0", 0))
-        port = sock.getsockname()[1]
-        return sock, port
+        pass
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    sock.bind(("0.0.0.0", 0))
+    port = sock.getsockname()[1]
+    return sock, port
 
 
 def get_local_ip() -> str:
