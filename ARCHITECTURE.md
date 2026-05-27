@@ -46,7 +46,7 @@ graph TB
     end
 
     subgraph Desktop["Desktop Layer — PyQt6"]
-        MW["main_window.py<br/>QMainWindow · 738 lines"]
+        MW["main_window.py<br/>QMainWindow · 751 lines"]
         CB["chess_board.py<br/>QWidget · 486 lines"]
         CD["coach_dashboard.py<br/>QFrame · 220 lines"]
         PD["promotion_dialog.py<br/>QDialog · Underpromotion"]
@@ -59,7 +59,7 @@ graph TB
     end
 
     subgraph Web["Web Layer — FastAPI"]
-        SV["server.py<br/>FastAPI · 229 lines"]
+        SV["server.py<br/>FastAPI · 246 lines"]
         API["REST Endpoints<br/>6 routes"]
         STATIC["Static Frontend<br/>chessboard.js + chess.js"]
         SV --> API & STATIC
@@ -159,14 +159,17 @@ graph LR
 
 ```
 EngineHandler (QObject, main thread)
+  ├── _ensure_engine_alive()   → ping() before analysis, auto-restart on failure
+  ├── _restart_engine()        → kill + start_engine(), emit error_occurred on fail
   ├── start_engine()           → popen_uci(Stockfish 18)
-  ├── start_analysis(board)    → sets pending_board, stops current thread
+  ├── start_analysis(board)    → ping first, sets pending_board, stops current thread
   ├── stop_analysis()          → clears pending, stops thread
   ├── stop_engine()            → quit() via logging
   │
   ├── AnalysisThread (QThread)
   │   ├── run()                → engine.analysis() loop
   │   ├── info_received        → Signal(dict) cross-thread
+  │   ├── error_occurred       → Signal(str) on crash
   │   └── stop()               → is_running=False + analysis.close()
   │
   └── Signals:
@@ -279,25 +282,26 @@ set_eval_bar_value(target)
 
 ```
 MainWindow (QMainWindow)
-  ├── _setup_menubar()   → File menu: Export/Import PGN, Analysis Board, New Game
-  ├── _setup_ui()        → Central widget: gradient bg, HBoxLayout(board:dashboard=3:1)
-  ├── _on_move(move)     → Validate, SAN, push, update list, feedback, run analysis
-  ├── _on_analysis(info) → Update eval bar, best line, PV, blunder/miss detection
-  ├── _undo() / _redo()  → Pop/push stack, invert CAN_UNDO/REDO
-  ├── _analysis_board()  → FEN input dialog → new analysis board
-  ├── _new_game()        → Color selection → reset state
-  ├── _reset_dashboard() → Shared helper (eliminates duplicated code)
-  └── _heartbeat_check() → 2s timer: detect hung analysis
+  ├── _setup_menubar()     → File menu: Export/Import PGN, Analysis Board, New Game
+  ├── _setup_ui()          → Central widget: gradient bg, HBoxLayout(board:dashboard=3:1)
+  ├── _on_move(move)       → Validate, SAN, push, update list, feedback, run analysis
+  ├── _on_analysis(info)   → Update eval bar, best line, PV, blunder/miss detection
+  ├── _undo() / _redo()    → Pop/push stack, invert CAN_UNDO/REDO
+  ├── _analysis_board()    → FEN input dialog → new analysis board
+  ├── _new_game()          → Color selection → reset state
+  ├── _reset_dashboard()   → Shared helper (eliminates duplicated code)
+  ├── _heartbeat_check()   → 2s timer: detect hung analysis, restart if dead (3s cooldown)
+  └── _on_engine_error()   → QMessageBox.warning on engine failure
 ```
 
 **Signal wiring:**
 ```
-ChessBoard.move_made        → MainWindow._on_move
-ChessBoard.move_made        → lambda: SoundManager.play_move()
+ChessBoard.move_made          → MainWindow._on_move
+ChessBoard.move_made          → lambda: SoundManager.play_move()
 EngineHandler.analysis_update → MainWindow._on_analysis
-EngineHandler.error_occurred → MainWindow._on_engine_error
-QTimer._heartbeat.timeout    → MainWindow._heartbeat_check
-Ctrl+Z / Ctrl+Y              → _undo() / _redo()
+EngineHandler.error_occurred  → MainWindow._on_engine_error
+QTimer._heartbeat.timeout      → MainWindow._heartbeat_check
+Ctrl+Z / Ctrl+Y                → _undo() / _redo()
 ```
 
 ### 8. ECO Detection — `eco_handler.py` + `eco_data.py`
@@ -573,20 +577,20 @@ display:
 
 ```
 tests/
-├── test_config.py              # 13 tests — YAML loading, validation, edge cases
-├── test_game_controller.py     # 21 tests — state, moves, undo/redo, phases, SAN
+├── test_config.py              # 14 tests — YAML loading, validation, edge cases
+├── test_game_controller.py     # 22 tests — state, moves, undo/redo, phases, SAN
 ├── test_eco.py                 # 13 tests — DB integrity, opening detection
-└── test_pgn_handler.py         # 16 tests — export/import roundtrip, replay
+└── test_pgn_handler.py         # 19 tests — export/import roundtrip, replay
 ```
 
 ### Coverage Areas
 
 | Area | Tests | Key Checks |
 |------|-------|-----------|
-| **Config loading** | 13 | Valid YAML, missing path, empty file, defaults, type validation, opacity bool rejection, path object support |
-| **Game controller** | 21 | Initial state, start game (both colors), human move (valid/invalid/illegal/before start), reset, record move, undo/redo with edge cases, SAN with check, turn detection, game-over transitions, phase values |
+| **Config loading** | 14 | Valid YAML, missing path, empty file, defaults, type validation, opacity bool rejection, path object support, ConfigError subclass |
+| **Game controller** | 22 | Initial state, start game (both colors), human move (valid/invalid/illegal/before start), reset, record move, undo/redo with edge cases, SAN with check, turn detection, game-over transitions, phase values/unique |
 | **ECO database** | 13 | Entry format (length, code validity, non-empty moves), no duplicates, opening detection for 7 named lines, longest-match wins, unknown returns none |
-| **PGN handler**| 16 | Simple/complex PGN, check symbols, game result, empty/headers-only, roundtrip, custom headers, replay edge cases |
+| **PGN handler**| 19 | Simple/complex PGN, check symbols, game result, empty/headers-only, roundtrip, custom headers, replay edge cases, fool's mate replay |
 
 ### Running Tests
 
@@ -609,8 +613,8 @@ pytest -k "undo"                # Filter by keyword
 | **Insufficient material** | `board.is_insufficient_material()` | Draw message |
 | **50-move rule** | `board.is_fifty_moves()` | Draw message displayed |
 | **Threefold repetition** | `board.is_repetition()` | Draw claim available |
-| **Engine crash** | `AnalysisThread` exception | `logger.error()` + `error_occurred` signal |
-| **Engine hang** | 2s heartbeat timer | `best_move (cached)` fallback |
+| **Engine crash** | `AnalysisThread` exception | `logger.error()` + `error_occurred` signal + auto-restart via `_restart_engine()` |
+| **Engine hang** | 2s heartbeat timer | `best_move (cached)` fallback + thread restart (3s cooldown) |
 | **Stockfish not found** | `FileNotFoundError` in `start_engine()` | User-friendly `QMessageBox.warning` |
 | **Multimedia missing** | `ImportError` for `QSoundEffect` | Graceful degrade — `_HAS_SOUND = False` |
 | **Invalid config YAML** | `yaml.safe_load()` exception | `ConfigError` with descriptive message |
@@ -639,6 +643,7 @@ pytest -k "undo"                # Filter by keyword
 | **QSoundEffect for sounds** | Zero external assets (WAV is generated) | Requires Qt Multimedia module |
 | **Port probing** | Finds free port before bind | Minimal TOCTOU window (1 line between close + bind) |
 | **Double-checked locking** | Lazy engine init without per-call lock | Slightly more code for thread safety |
+| **Engine liveness check** | `ping()` before every analysis call — lightweight crash/hang detection | Minor latency per check (~1ms) |
 | **Profanity-free** | No unprofessional language in codebase | N/A |
 
 ---

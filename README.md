@@ -297,7 +297,7 @@ chess-coach/
 │   ├── test_config.py            # Config loading, type validation, error handling
 │   ├── test_game_controller.py   # Board state, undo/redo, phases, transitions
 │   ├── test_eco.py               # ECO database integrity + opening detection (13 tests)
-│   └── test_pgn_handler.py       # PGN export/import roundtrip (15 tests)
+│   └── test_pgn_handler.py       # PGN export/import roundtrip (19 tests)
 │
 ├── static/                       # Web frontend
 ├── screenshots/                  # App screenshots
