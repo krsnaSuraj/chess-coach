@@ -392,6 +392,8 @@ class ChessBoard(QWidget):
             return
         if self.board.is_game_over():
             return
+        if self._pending_move:
+            return
         pos = event.position()
         col, row, sq, ox, oy = self._board_coords(pos)
         if col is None:

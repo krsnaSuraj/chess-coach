@@ -46,9 +46,9 @@ graph TB
     end
 
     subgraph Desktop["Desktop Layer — PyQt6"]
-        MW["main_window.py<br/>QMainWindow · 759 lines"]
-        CB["chess_board.py<br/>QWidget · 410 lines"]
-        CD["coach_dashboard.py<br/>QFrame · 190 lines"]
+        MW["main_window.py<br/>QMainWindow · 741 lines"]
+        CB["chess_board.py<br/>QWidget · 485 lines"]
+        CD["coach_dashboard.py<br/>QFrame · 220 lines"]
         PD["promotion_dialog.py<br/>QDialog · Underpromotion"]
         SM["sound_manager.py<br/>WAV · QSoundEffect"]
         MW --> CB
@@ -59,7 +59,7 @@ graph TB
     end
 
     subgraph Web["Web Layer — FastAPI"]
-        SV["server.py<br/>FastAPI · 224 lines"]
+        SV["server.py<br/>FastAPI · 230 lines"]
         API["REST Endpoints<br/>6 routes"]
         STATIC["Static Frontend<br/>chessboard.js + chess.js"]
         SV --> API & STATIC
@@ -69,14 +69,14 @@ graph TB
         GC["game_controller.py<br/>RLock · Board · Phases · Undo/Redo · Cache"]
         EH["engine_handler.py<br/>QObject · AnalysisThread · UCI"]
         ECO["eco_handler.py<br/>get_opening(board)"]
-        ECD["eco_data.py<br/>471 entries · A00-E99"]
+        ECD["eco_data.py<br/>500 entries · A00-E99"]
         ECO --> ECD
     end
 
     subgraph Util["Utility Layer"]
         CFG["config.py<br/>YAML · Socket · IP"]
         PGN["pgn_handler.py<br/>board_to_pgn · pgn_to_moves · replay_moves"]
-        INIT["__init__.py<br/>17 exported symbols"]
+        INIT["__init__.py<br/>19 exported symbols"]
     end
 
     CLI --> Desktop & Web
@@ -99,13 +99,13 @@ graph TB
 def main() -> None:
     # Parses sys.argv for "web" / "server" / "--web"
     # Desktop: QApplication → MainWindow → exec()
-    # Web: uvicorn.run(app, sockets=[pre_bound_socket])
+    # Web: uvicorn.run(app, host="0.0.0.0", port=port)
 ```
 
 | Aspect | Desktop | Web |
 |--------|---------|-----|
 | Launch | `QApplication(sys.argv)` | `uvicorn.run()` |
-| Port | N/A | Pre-bound socket via `find_free_port()` (no TOCTOU) |
+| Port | N/A | `find_free_port()` probe + `uvicorn.run(port=...)` |
 | Logging | `logging.basicConfig(level=INFO)` | Same |
 
 ### 2. Configuration — `config.py`
@@ -303,7 +303,7 @@ Ctrl+Z / Ctrl+Y              → _undo() / _redo()
 ### 8. ECO Detection — `eco_handler.py` + `eco_data.py`
 
 ```
-eco_data.py: 471 entries as list of (ECO_code, name, SAN_moves)
+eco_data.py: 500 unique codes (509 entries with A00 variants) as list of (ECO_code, name, SAN_moves)
 eco_handler.py: get_opening(board) → (code, name) | None
 ```
 
@@ -324,21 +324,21 @@ get_opening(board):
 **Coverage:** A00–E99 with all major openings:
 | Range | Opening | Entries |
 |-------|---------|---------|
-| A00–A09 | Irregular Openings | 17 |
-| A10–A39 | English Opening | 34 |
-| A40–A49 | Queen's Pawn | 15 |
-| A50–A79 | Indian + Benoni | 33 |
-| A80–A99 | Dutch Defense | 23 |
-| B00–B09 | Modern/Pirc/Robatsch | 16 |
-| B10–B19 | Caro-Kann | 19 |
-| B20–B99 | Sicilian Defense | 50 |
-| C00–C19 | French Defense | 21 |
+| A00–A09 | Irregular Openings | 10 |
+| A10–A39 | English Opening | 30 |
+| A40–A49 | Queen's Pawn | 10 |
+| A50–A79 | Indian + Benoni | 30 |
+| A80–A99 | Dutch Defense | 20 |
+| B00–B09 | Modern/Pirc/Robatsch | 10 |
+| B10–B19 | Caro-Kann | 10 |
+| B20–B99 | Sicilian Defense | 80 |
+| C00–C19 | French Defense | 20 |
 | C20–C59 | Open Games (Ruy, Italian, etc.) | 40 |
-| C60–C99 | Ruy Lopez | 31 |
-| D00–D69 | Queen's Gambit | 62 |
+| C60–C99 | Ruy Lopez | 40 |
+| D00–D69 | Queen's Gambit | 70 |
 | D70–D99 | Grünfeld Defense | 30 |
-| E00–E59 | Indian Defenses (Nimzo, Queen's) | 56 |
-| E60–E99 | King's Indian | 24 |
+| E00–E59 | Indian Defenses (Nimzo, Queen's) | 60 |
+| E60–E99 | King's Indian | 40 |
 
 ### 9. Sound Manager — `sound_manager.py`
 
@@ -637,7 +637,7 @@ pytest -k "undo"                # Filter by keyword
 | **ECO as Python dict** | Compact, self-contained, no external files | Linear scan O(n) per lookup |
 | **Longest-prefix match** | Most specific opening wins | Prefix overlaps possible (rare) |
 | **QSoundEffect for sounds** | Zero external assets (WAV is generated) | Requires Qt Multimedia module |
-| **Pre-bound socket** | Eliminates TOCTOU race on port | Requires uvicorn `sockets=` parameter |
+| **Port probing** | Finds free port before bind | Minimal TOCTOU window (1 line between close + bind) |
 | **Double-checked locking** | Lazy engine init without per-call lock | Slightly more code for thread safety |
 | **Profanity-free** | No unprofessional language in codebase | N/A |
 
@@ -645,10 +645,7 @@ pytest -k "undo"                # Filter by keyword
 
 ## 🔮 Future Roadmap
 
-- [ ] **Missing ECO codes**: A00–A09, B00–B09 base entries
 - [ ] **Automated testing**: Add tests for `engine_handler.py`, `chess_board.py`, `server.py`
-- [ ] **pip-install path fix**: Replace `os.getcwd()` with `__file__`-relative in engine fallback
-- [ ] **GamePhase enum tests**: Add tests for all enum values
 - [ ] **Concurrent web safety**: Full async endpoint support for uvicorn workers
 - [ ] **Opening explorer**: Interactive tree view of ECO variants
 - [ ] **Move statistics**: Accuracy rating, CAPS-style analysis

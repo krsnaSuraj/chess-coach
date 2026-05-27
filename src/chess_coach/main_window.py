@@ -217,7 +217,6 @@ class MainWindow(QMainWindow):
 
         QShortcut(QKeySequence("Ctrl+Z"), self).activated.connect(self._undo)
         QShortcut(QKeySequence("Ctrl+Y"), self).activated.connect(self._redo)
-        QShortcut(QKeySequence("Ctrl+N"), self).activated.connect(self._new_game)
 
         self.statusBar().setStyleSheet(f"""
             QStatusBar {{
@@ -319,25 +318,23 @@ class MainWindow(QMainWindow):
         try:
             self.engine_handler.stop_analysis()
             move, san_text = self.redo_stack.pop()
+
+            if not san_text:
+                try:
+                    san_text = self.board.san(move)
+                except Exception:
+                    san_text = move.uci()
+
             self.board.push(move)
             self.position_version += 1
             self.analysis_received = False
             self.last_known_move = None
             self.has_prev_eval = False
 
-            if san_text:
-                self.move_list.addItem(san_text)
-            else:
-                move_num = (len(self.board.move_stack) + 1) // 2
-                turn = "W" if self.board.turn == chess.BLACK else "B"
-                suffix = "#" if self.board.is_checkmate() else "+" if self.board.is_check() else ""
-                san = ""
-                try:
-                    if self.board.move_stack:
-                        san = self.board.san(self.board.peek())
-                except Exception:
-                    san = move.uci()
-                self.move_list.addItem(f"{move_num}{turn}  {san}{suffix}")
+            move_num = (len(self.board.move_stack) + 1) // 2
+            turn = "W" if self.board.turn == chess.BLACK else "B"
+            suffix = "#" if self.board.is_checkmate() else "+" if self.board.is_check() else ""
+            self.move_list.addItem(f"{move_num}{turn}  {san_text}{suffix}")
             self.move_list.scrollToBottom()
 
             self.chess_board.set_board(self.board)

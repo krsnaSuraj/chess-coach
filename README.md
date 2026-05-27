@@ -19,7 +19,7 @@
 
 ## 🎯 Overview
 
-Chess Coach is a professional real-time chess analysis sidekick that integrates **Stockfish 18** into a dual-interface application. It evaluates positions exclusively during **your turn**, detects blunders and missed opportunities, suggests best moves with visual arrows, presents principal variation lines, and identifies openings via a **471-entry ECO database** — while staying completely silent when you manually enter opponent moves.
+Chess Coach is a professional real-time chess analysis sidekick that integrates **Stockfish 18** into a dual-interface application. It evaluates positions exclusively during **your turn**, detects blunders and missed opportunities, suggests best moves with visual arrows, presents principal variation lines, and identifies openings via a **500-entry ECO database** — while staying completely silent when you manually enter opponent moves.
 
 **Perfect for:** Online chess (chess.com, lichess) where you play one side and want expert-level guidance without distraction.
 
@@ -42,7 +42,7 @@ Chess Coach is a professional real-time chess analysis sidekick that integrates 
     </td>
     <td>
       <h4>🎯 ECO Opening Detection</h4>
-      <strong>471 entries</strong> across A00–E99. Detects 50+ named openings (Ruy Lopez, Sicilian Najdorf, French, Grünfeld, Benoni, Catalan, etc.) with longest-prefix matching.
+      <strong>500 entries</strong> across A00–E99. Detects 50+ named openings (Ruy Lopez, Sicilian Najdorf, French, Grünfeld, Benoni, Catalan, etc.) with longest-prefix matching.
     </td>
   </tr>
   <tr>
@@ -180,7 +180,7 @@ Same chess logic, served over HTTP:
 1. Run `python -m chess_coach web`
 2. Open **http://localhost:8000** in your browser (or the LAN URL for other devices)
 3. Select your color → play as above
-4. Web API now supports promotion moves via the `promotion` field
+4. Promotion dialog appears when a pawn reaches the 8th rank
 
 ---
 
@@ -260,7 +260,7 @@ graph TB
     subgraph Core["Shared Core"]
         GC["GameController<br/>Board · Phases · Undo/Redo · Cache"]
         EH["EngineHandler<br/>Stockfish · QThread · UCI"]
-        ECO["ECO Handler<br/>471 Openings"]
+        ECO["ECO Handler<br/>500 Openings"]
         GC --> EH
         MW --> GC & ECO
         SV --> GC
@@ -278,7 +278,7 @@ graph TB
 chess-coach/
 │
 ├── src/chess_coach/              # Python package
-│   ├── __init__.py               # Public API exports (17 symbols)
+│   ├── __init__.py               # Public API exports (19 symbols: 5 config + 2 game + 3 ECO + 4 GUI + 2 server + 3 PGN)
 │   ├── __main__.py               # CLI entry: python -m chess_coach [web]
 │   ├── config.py                 # YAML loader, pre-bound socket port, IP lookup
 │   ├── game_controller.py        # Shared game state, undo/redo, phases, cache
@@ -289,7 +289,7 @@ chess-coach/
 │   ├── main_window.py            # Wires board + dashboard + engine + menus + sounds
 │   ├── server.py                 # FastAPI web server, 6 REST endpoints, CORS
 │   ├── eco_handler.py            # ECO opening detection (longest-prefix match)
-│   ├── eco_data.py               # 471-entry ECO database (A00–E99)
+│   ├── eco_data.py               # 500-entry ECO database (A00–E99, all covered)
 │   ├── sound_manager.py          # WAV generation + QSoundEffect playback
 │   └── pgn_handler.py            # PGN export/import utilities
 │
@@ -324,7 +324,7 @@ chess-coach/
 | **Web Frontend** | chessboard.js + chess.js | Browser-based board interaction |
 | **Concurrency** | `threading` (RLock) + `QThread` | Non-blocking engine analysis, thread-safe state |
 | **Sound** | PyQt6.QtMultimedia (QSoundEffect) | Move click sound (auto-generated WAV) |
-| **AI/Detection** | ECO database (471 entries) | Opening name recognition via longest-prefix match |
+| **AI/Detection** | ECO database (500 entries) | Opening name recognition via longest-prefix match |
 | **Configuration** | PyYAML | `config.yaml` parsing with type validation |
 | **Testing** | pytest, mocktail | 68 tests, 8 test categories |
 
