@@ -1,10 +1,10 @@
 # Python
 __pycache__/
-*.pyc
-*.pyo
+*.py[cod]
 *.egg-info/
 dist/
 build/
+*.egg
 
 # Virtual environment
 .venv/
@@ -24,9 +24,21 @@ Thumbs.db
 # Binaries
 stockfish.exe
 stockfish
+bin/
 
 # Temp test files
 _*.py
 _*.ps1
 ._*.tmp
 ._*.txt
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Environment
+.env
+
+# Logs
+*.log

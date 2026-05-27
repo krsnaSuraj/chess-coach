@@ -1,5 +1,5 @@
 PyQt6
-python-chess
+python-chess>=1.999
 pyyaml
 fastapi
 uvicorn

@@ -10,3 +10,8 @@ display:
   light_square: "#F0D9B5"
   arrow_color: "#00FF00"
   arrow_opacity: 0.6
+  highlight_color: "#FFFF64"
+  check_color: "#FF3232"
+  dot_color: "#646464"
+  capture_ring_color: "#323232"
+  last_move_color: "#FFFF64"
