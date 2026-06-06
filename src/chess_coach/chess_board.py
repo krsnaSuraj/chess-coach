@@ -5,6 +5,7 @@ import os
 from PyQt6.QtWidgets import QWidget
 
 from chess_coach.promotion_dialog import PromotionDialog
+from chess_coach.theme_manager import Theme, get_theme, ThemeManager
 from PyQt6.QtGui import (
     QPainter, QColor, QPen, QFont, QPixmap, QPainterPath,
     QResizeEvent, QPaintEvent, QMouseEvent, QCursor,
@@ -42,9 +43,15 @@ COLORS: dict[str, str] = {
     "board_dark": "#b58863",
 }
 
+# Arrow kind → color key (resolved against theme)
+ARROW_KINDS = ("best", "plan", "threat", "user")
+
 
 class ChessBoard(QWidget):
     move_made = pyqtSignal(chess.Move)
+    premove_set = pyqtSignal(chess.Move)        # user set a premove
+    arrow_drawn = pyqtSignal(int, int, str)    # from_sq, to_sq, kind
+    square_clicked = pyqtSignal(int)            # right-click: square
 
     def __init__(self, config: dict) -> None:
         super().__init__()
@@ -65,26 +72,35 @@ class ChessBoard(QWidget):
         self.check_square: int | None = None
         self.legal_move_squares: list[int] = []
         self._pending_move: chess.Move | None = None
+        # SOTA: multi-arrow + premove + freehand drawing
+        self._arrows: list[tuple[int, int, str]] = []  # (from_sq, to_sq, kind)
+        self._premove: chess.Move | None = None
+        self._premove_from_sq: int | None = None  # visual source for premove ghost
+        self._right_btn_start: QPoint | None = None
+        self._right_btn_current: QPoint | None = None
+        self._right_btn_from_sq: int | None = None
 
+        # Theme
+        self._theme: Theme = get_theme()
         display = config.get("display", {})
         self.light_color = QColor(display.get("light_square", COLORS["board_light"]))
         self.dark_color = QColor(display.get("dark_square", COLORS["board_dark"]))
         self.highlight_color = QColor(display.get("highlight_color", "#FFFF64"))
         self.highlight_color.setAlpha(80)
-        self.check_color = QColor(display.get("check_color", "#FF3232"))
+        self.check_color = QColor(display.get("check_color", self._theme.check))
         self.check_color.setAlpha(120)
-        self.dot_color = QColor(display.get("dot_color", "#646464"))
+        self.dot_color = QColor(display.get("dot_color", self._theme.legal_dot))
         self.dot_color.setAlpha(160)
-        self.capture_ring_color = QColor(display.get("capture_ring_color", "#323232"))
+        self.capture_ring_color = QColor(display.get("capture_ring_color", self._theme.capture_ring))
         self.capture_ring_color.setAlpha(200)
 
-        arrow_hex = display.get("arrow_color", "#00FF00")
+        arrow_hex = display.get("arrow_color", self._theme.arrow_best)
         arrow_opacity = display.get("arrow_opacity", 0.6)
         ac = QColor(arrow_hex)
         ac.setAlphaF(arrow_opacity)
         self.arrow_color = ac
 
-        self.last_move_color = QColor(display.get("last_move_color", "#FFFF64"))
+        self.last_move_color = QColor(display.get("last_move_color", self._theme.last_move))
         self.last_move_color.setAlpha(90)
 
         self.raw_pieces: dict[str, QPixmap] = {}
@@ -99,7 +115,24 @@ class ChessBoard(QWidget):
         self._anim_timer = QTimer(self)
         self._anim_timer.timeout.connect(self._animation_step)
         self._anim_elapsed = QElapsedTimer()
-        self._anim_duration_ms = 150
+        self._anim_duration_ms = self._theme.animation.move_duration_ms
+
+    def set_theme(self, theme: Theme) -> None:
+        """Switch theme. Re-applies all board colors and animation duration."""
+        self._theme = theme
+        # Re-apply defaults that depend on theme
+        self.check_color = QColor(theme.check)
+        self.check_color.setAlpha(120)
+        self.dot_color = QColor(theme.legal_dot)
+        self.dot_color.setAlpha(160)
+        self.capture_ring_color = QColor(theme.capture_ring)
+        self.capture_ring_color.setAlpha(200)
+        self.arrow_color = QColor(theme.arrow_best)
+        self.arrow_color.setAlphaF(0.6)
+        self.last_move_color = QColor(theme.last_move)
+        self.last_move_color.setAlpha(90)
+        self._anim_duration_ms = theme.animation.move_duration_ms
+        self.update()
 
     def _load_piece_images(self) -> None:
         for key, filename in PIECE_MAP.items():
@@ -162,6 +195,32 @@ class ChessBoard(QWidget):
         self.legal_move_squares = squares
         self.update()
 
+    # --- SOTA additions: multi-arrow, premove, freehand ---
+
+    def add_arrow(self, from_sq: int, to_sq: int, kind: str = "best") -> None:
+        """Add a colored arrow. Kinds: best | plan | threat | user."""
+        if kind not in ARROW_KINDS:
+            kind = "best"
+        self._arrows.append((from_sq, to_sq, kind))
+        self.update()
+
+    def clear_arrows(self) -> None:
+        self._arrows = []
+        self.update()
+
+    def set_arrows(self, arrows: list[tuple[int, int, str]]) -> None:
+        self._arrows = list(arrows)
+        self.update()
+
+    def set_premove(self, move: chess.Move | None) -> None:
+        """Set a premove (Lichess-style move-while-waiting)."""
+        self._premove = move
+        self._premove_from_sq = move.from_square if move else None
+        self.update()
+
+    def premove(self) -> chess.Move | None:
+        return self._premove
+
     def _board_coords(self, pos: QPointF) -> tuple[int | None, int | None, float, float, float]:
         size = min(self.width(), self.height())
         sq = size / 8
@@ -208,8 +267,10 @@ class ChessBoard(QWidget):
         self._draw_legal_moves(painter, sq, ox, oy)
         self._draw_pieces(painter, sq, ox, oy)
         self._draw_coordinates(painter, sq, ox, oy)
-        self._draw_best_move_arrow(painter, sq, ox, oy)
+        self._draw_all_arrows(painter, sq, ox, oy)
+        self._draw_premove(painter, sq, ox, oy)
         self._draw_animation(painter, sq, ox, oy)
+        self._draw_right_click_arrow(painter, sq, ox, oy)
 
         if self.dragged_piece and self._pending_move is None:
             self._draw_dragged_piece(painter, sq)
@@ -387,18 +448,142 @@ class ChessBoard(QWidget):
         painter.setPen(Qt.PenStyle.NoPen)
         painter.drawPolygon([p1, p2, p3])
 
+    def _draw_all_arrows(self, painter: QPainter, sq: float, ox: float, oy: float) -> None:
+        """Draw every arrow in self._arrows. Kinds → theme colors."""
+        # Arrow color map (resolved from theme)
+        kind_color = {
+            "best":   QColor(self._theme.arrow_best),
+            "plan":   QColor(self._theme.arrow_plan),
+            "threat": QColor(self._theme.arrow_threat),
+            "user":   QColor(self._theme.arrow_user),
+        }
+        for from_sq, to_sq, kind in self._arrows:
+            color = kind_color.get(kind, self.arrow_color)
+            color.setAlphaF(0.7)
+            vcol1, vrow1 = self._to_visual(from_sq)
+            vcol2, vrow2 = self._to_visual(to_sq)
+            x1 = ox + vcol1 * sq + sq / 2
+            y1 = oy + vrow1 * sq + sq / 2
+            x2 = ox + vcol2 * sq + sq / 2
+            y2 = oy + vrow2 * sq + sq / 2
+            pen = QPen(color, sq * 0.09)
+            pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+            painter.setPen(pen)
+            painter.drawLine(QPointF(x1, y1), QPointF(x2, y2))
+            angle = math.atan2(y2 - y1, x2 - x1)
+            asz = sq * 0.22
+            p1 = QPointF(x2, y2)
+            p2 = QPointF(x2 - asz * math.cos(angle - 0.5), y2 - asz * math.sin(angle - 0.5))
+            p3 = QPointF(x2 - asz * math.cos(angle + 0.5), y2 - asz * math.sin(angle + 0.5))
+            painter.setBrush(color)
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.drawPolygon([p1, p2, p3])
+
+    def _draw_premove(self, painter: QPainter, sq: float, ox: float, oy: float) -> None:
+        """Render a premove as a dashed arrow with a ghost piece on target."""
+        if not self._premove:
+            return
+        from_sq = self._premove.from_square
+        to_sq = self._premove.to_square
+        color = QColor(self._theme.premove)
+        color.setAlphaF(0.7)
+        vcol1, vrow1 = self._to_visual(from_sq)
+        vcol2, vrow2 = self._to_visual(to_sq)
+        x1 = ox + vcol1 * sq + sq / 2
+        y1 = oy + vrow1 * sq + sq / 2
+        x2 = ox + vcol2 * sq + sq / 2
+        y2 = oy + vrow2 * sq + sq / 2
+        pen = QPen(color, sq * 0.08, Qt.PenStyle.DashLine)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        painter.setPen(pen)
+        painter.drawLine(QPointF(x1, y1), QPointF(x2, y2))
+        # Arrow head (smaller, hollow feel via lower alpha)
+        angle = math.atan2(y2 - y1, x2 - x1)
+        asz = sq * 0.18
+        p1 = QPointF(x2, y2)
+        p2 = QPointF(x2 - asz * math.cos(angle - 0.5), y2 - asz * math.sin(angle - 0.5))
+        p3 = QPointF(x2 - asz * math.cos(angle + 0.5), y2 - asz * math.sin(angle + 0.5))
+        painter.setBrush(color)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.drawPolygon([p1, p2, p3])
+        # Ghost piece on target (50% opacity)
+        piece = self.board.piece_at(from_sq)
+        if piece:
+            key = self._get_piece_key(piece)
+            pix = self.scaled_pieces.get(key)
+            if pix:
+                painter.setOpacity(0.4)
+                painter.drawPixmap(
+                    int(ox + vcol2 * sq + (sq - pix.width()) / 2),
+                    int(oy + vrow2 * sq + (sq - pix.height()) / 2),
+                    pix,
+                )
+                painter.setOpacity(1.0)
+
+    def _draw_right_click_arrow(self, painter: QPainter, sq: float, ox: float, oy: float) -> None:
+        """Render the in-progress right-click drag as a yellow arrow."""
+        if self._right_btn_start is None or self._right_btn_current is None:
+            return
+        if self._right_btn_from_sq is None:
+            return
+        # From the start square
+        vcol1, vrow1 = self._to_visual(self._right_btn_from_sq)
+        x1 = ox + vcol1 * sq + sq / 2
+        y1 = oy + vrow1 * sq + sq / 2
+        x2 = float(self._right_btn_current.x())
+        y2 = float(self._right_btn_current.y())
+        color = QColor(self._theme.arrow_user)
+        color.setAlphaF(0.6)
+        pen = QPen(color, sq * 0.1)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        painter.setPen(pen)
+        painter.drawLine(QPointF(x1, y1), QPointF(x2, y2))
+
     def mousePressEvent(self, event: QMouseEvent | None) -> None:
+        if event is None:
+            return
+        pos = event.position()
+        col, row, sq, ox, oy = self._board_coords(pos)
+        square = self._to_square(col, row) if col is not None else None
+
+        # Right-click: freehand arrow start
+        if event.button() == Qt.MouseButton.RightButton:
+            if square is not None:
+                self._right_btn_start = pos.toPoint()
+                self._right_btn_current = pos.toPoint()
+                self._right_btn_from_sq = square
+                self.update()
+            return
+
         if event.button() != Qt.MouseButton.LeftButton:
             return
         if self.board.is_game_over():
             return
         if self._pending_move:
             return
-        pos = event.position()
-        col, row, sq, ox, oy = self._board_coords(pos)
-        if col is None:
+        if col is None or square is None:
             return
-        square = self._to_square(col, row)
+        # Premove: if it's opponent's turn and you have a piece of your color
+        if self.playable_side is not None and self.board.turn != self.playable_side:
+            piece = self.board.piece_at(square)
+            if piece and piece.color == self.playable_side:
+                self.dragged_piece = piece
+                self.dragged_square = square
+                self.drag_start_pos = pos.toPoint()
+                self.mouse_pos = pos.toPoint()
+                # For premove: compute hypothetical targets by flipping turn
+                # on a copy, so we can use pseudo_legal_moves for our piece
+                # regardless of whose turn it is.
+                hyp = self.board.copy()
+                hyp.turn = self.playable_side
+                self.legal_move_squares = []
+                for m in hyp.pseudo_legal_moves:
+                    if m.from_square == square:
+                        self.legal_move_squares.append(m.to_square)
+                self.drag_cache = QPixmap(self.size())
+                self.drag_cache.fill(Qt.GlobalColor.transparent)
+                self.update()
+            return
         piece = self.board.piece_at(square)
         if piece:
             if self.playable_side is not None and piece.color != self.playable_side:
@@ -428,8 +613,15 @@ class ChessBoard(QWidget):
             self.update()
 
     def mouseMoveEvent(self, event: QMouseEvent | None) -> None:
+        if event is None:
+            return
         if self.dragged_piece:
             self.mouse_pos = event.position().toPoint()
+            self.update()
+            return
+        # Right-click drag
+        if self._right_btn_start is not None:
+            self._right_btn_current = event.position().toPoint()
             self.update()
             return
         col, row, _sq, _ox, _oy = self._board_coords(event.position())
@@ -442,23 +634,67 @@ class ChessBoard(QWidget):
         self.setCursor(QCursor(Qt.CursorShape.ArrowCursor))
 
     def mouseReleaseEvent(self, event: QMouseEvent | None) -> None:
+        if event is None:
+            return
+        # Right-click release: finalize arrow or cancel
+        if event.button() == Qt.MouseButton.RightButton and self._right_btn_start is not None:
+            pos = event.position()
+            col, row, _sq, _ox, _oy = self._board_coords(pos)
+            target = self._to_square(col, row) if col is not None else None
+            from_sq = self._right_btn_from_sq
+            self._right_btn_start = None
+            self._right_btn_current = None
+            self._right_btn_from_sq = None
+            if target is not None and target != from_sq:
+                # Add user arrow
+                self._arrows.append((from_sq, target, "user"))
+                self.arrow_drawn.emit(from_sq, target, "user")
+            self.update()
+            return
         if not self.dragged_piece:
             return
         col, row, sq, ox, oy = self._board_coords(event.position())
         self.legal_move_squares = []
         if col is not None:
             target = self._to_square(col, row)
-
+            # Determine if premove or actual move
+            is_premove = (self.playable_side is not None and
+                          self.board.turn != self.playable_side)
+            if is_premove:
+                # Validate against hypothetical board (with our turn)
+                hyp = self.board.copy()
+                hyp.turn = self.playable_side
+                pseudo_legal = [
+                    m for m in hyp.pseudo_legal_moves
+                    if m.from_square == self.dragged_square and m.to_square == target
+                ]
+                if pseudo_legal:
+                    pre_move = pseudo_legal[0]
+                    if pre_move.promotion:
+                        color = self.dragged_piece.color
+                        dialog = PromotionDialog(color, self)
+                        if dialog.exec():
+                            pre_move = chess.Move(
+                                self.dragged_square, target,
+                                promotion=dialog.selected_piece,
+                            )
+                        else:
+                            self._clear_drag()
+                            return
+                    self._premove = pre_move
+                    self._premove_from_sq = self.dragged_square
+                    self.premove_set.emit(pre_move)
+                    self._clear_drag()
+                    self.update()
+                    return
+                self._clear_drag()
+                return
             legal = [
                 m for m in self.board.legal_moves
                 if m.from_square == self.dragged_square and m.to_square == target
             ]
             if not legal:
-                self.dragged_piece = None
-                self.dragged_square = None
-                self.drag_cache = None
-                self.drag_start_pos = None
-                self.update()
+                self._clear_drag()
                 return
 
             legal_move = legal[0]
@@ -470,15 +706,14 @@ class ChessBoard(QWidget):
                         self.dragged_square, target, promotion=dialog.selected_piece
                     )
                 else:
-                    self.dragged_piece = None
-                    self.dragged_square = None
-                    self.drag_cache = None
-                    self.drag_start_pos = None
-                    self.update()
+                    self._clear_drag()
                     return
 
             self._start_piece_animation(legal_move, sq, ox, oy)
             return
+        self._clear_drag()
+
+    def _clear_drag(self) -> None:
         self.dragged_piece = None
         self.dragged_square = None
         self.drag_cache = None

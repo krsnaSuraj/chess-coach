@@ -1,13 +1,41 @@
 from __future__ import annotations
 
+import os
+import sys
 from pathlib import Path
 from typing import Any
 
 import pytest
 import yaml
 
+# Ensure offscreen Qt platform for headless CI
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
 from chess_coach.config import load_config, ConfigError
 from chess_coach.game_controller import GameController
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _qapp_session():
+    """Session-scoped QApplication. Required for all Qt widget tests."""
+    from PyQt6.QtWidgets import QApplication
+    app = QApplication.instance()
+    if app is None:
+        app = QApplication(sys.argv)
+    yield app
+
+
+@pytest.fixture
+def qtbot_shim(_qapp_session):
+    """Minimal qtbot replacement: tracks widgets for cleanup."""
+    added: list = []
+
+    class _Shim:
+        def addWidget(self, w):
+            added.append(w)
+            return w
+
+    return _Shim()
 
 
 @pytest.fixture

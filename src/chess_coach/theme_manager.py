@@ -128,6 +128,9 @@ class Theme:
     eval_draw: str         # 0 cp
     eval_win: str          # +infinity cp
 
+    # Brilliant move highlight (move-class special effect)
+    brilliant: str         # usually accent_secondary or warm gold
+
     # Sound
     sound: SoundPalette = field(default_factory=SoundPalette)
 
@@ -143,7 +146,7 @@ class Theme:
                   "success", "warning", "danger", "text", "text_dim",
                   "last_move", "check", "legal_dot", "capture_ring", "selected",
                   "premove", "arrow_best", "arrow_plan", "arrow_threat",
-                  "arrow_user", "eval_loss", "eval_draw", "eval_win"):
+                  "arrow_user", "eval_loss", "eval_draw", "eval_win", "brilliant"):
             d[k] = getattr(self, k)
         return d
 
@@ -167,6 +170,7 @@ _MIDNIGHT = Theme(
     arrow_best="#00FF00", arrow_plan="#58a6ff", arrow_threat="#FF6B6B",
     arrow_user="#FFD700",
     eval_loss="#FF3232", eval_draw="#646464", eval_win="#3FB950",
+    brilliant="#FFD700",
     sound=SoundPalette(attack_ms=2, decay_ms=80, fundamental_hz=800,
                        harmonics=((2.0, 0.25),), brightness=0.6, reverb_ms=20),
     animation=AnimationPreset(move_duration_ms=180, easing="OutCubic",
@@ -188,6 +192,7 @@ _FOREST = Theme(
     arrow_best="#7cc473", arrow_plan="#a3d977", arrow_threat="#e07a5f",
     arrow_user="#f6f669",
     eval_loss="#e07a5f", eval_draw="#5a7245", eval_win="#7cc473",
+    brilliant="#f6f669",
     sound=SoundPalette(attack_ms=8, decay_ms=120, fundamental_hz=400,
                        harmonics=((2.0, 0.4), (3.0, 0.2)), brightness=0.3,
                        reverb_ms=40),
@@ -210,6 +215,7 @@ _SUNSET = Theme(
     arrow_best="#ffb84d", arrow_plan="#ff8c42", arrow_threat="#d62828",
     arrow_user="#fff3e0",
     eval_loss="#d62828", eval_draw="#8b4513", eval_win="#ffb84d",
+    brilliant="#ffd166",
     sound=SoundPalette(attack_ms=10, decay_ms=140, fundamental_hz=350,
                        harmonics=((2.0, 0.35), (3.0, 0.15)), brightness=0.4,
                        reverb_ms=60),
@@ -232,6 +238,7 @@ _MARBLE = Theme(
     arrow_best="#43a047", arrow_plan="#1e88e5", arrow_threat="#e53935",
     arrow_user="#fb8c00",
     eval_loss="#e53935", eval_draw="#9e9e9e", eval_win="#43a047",
+    brilliant="#5e35b1",
     sound=SoundPalette(attack_ms=3, decay_ms=70, fundamental_hz=1000,
                        harmonics=((2.0, 0.3), (4.0, 0.1)), brightness=0.7,
                        reverb_ms=10),
@@ -254,6 +261,7 @@ _LICHESS = Theme(
     arrow_best="#629924", arrow_plan="#3893e8", arrow_threat="#cd3232",
     arrow_user="#d59120",
     eval_loss="#cd3232", eval_draw="#898378", eval_win="#629924",
+    brilliant="#d59120",
     sound=SoundPalette(attack_ms=4, decay_ms=80, fundamental_hz=600,
                        harmonics=((2.0, 0.3), (3.0, 0.15)), brightness=0.5,
                        reverb_ms=15),
@@ -276,6 +284,7 @@ _BLUE_GLASS = Theme(
     arrow_best="#4dd0e1", arrow_plan="#4fc3f7", arrow_threat="#ff5252",
     arrow_user="#fff59d",
     eval_loss="#ff5252", eval_draw="#4fc3f7", eval_win="#4dd0e1",
+    brilliant="#fff59d",
     sound=SoundPalette(attack_ms=1, decay_ms=60, fundamental_hz=1200,
                        harmonics=((2.0, 0.2), (3.0, 0.1)), brightness=0.8,
                        reverb_ms=5),
@@ -298,6 +307,7 @@ _CYBER_NEON = Theme(
     arrow_best="#0ff0fc", arrow_plan="#ff00ff", arrow_threat="#ff0055",
     arrow_user="#ffff00",
     eval_loss="#ff0055", eval_draw="#ff00ff", eval_win="#0ff0fc",
+    brilliant="#ffff00",
     sound=SoundPalette(attack_ms=1, decay_ms=40, fundamental_hz=1500,
                        harmonics=((2.0, 0.4), (3.0, 0.2), (4.0, 0.1)),
                        brightness=0.9, reverb_ms=5),
@@ -320,6 +330,7 @@ _SEPIA = Theme(
     arrow_best="#6b8e23", arrow_plan="#8b4513", arrow_threat="#8b0000",
     arrow_user="#daa520",
     eval_loss="#8b0000", eval_draw="#8b4513", eval_win="#6b8e23",
+    brilliant="#daa520",
     sound=SoundPalette(attack_ms=12, decay_ms=160, fundamental_hz=300,
                        harmonics=((2.0, 0.4), (3.0, 0.2)), brightness=0.2,
                        reverb_ms=80),
@@ -342,8 +353,13 @@ THEMES: dict[str, Theme] = {
 DEFAULT_THEME = "midnight"
 
 
-def get_theme(name: str) -> Theme:
-    """Fetch theme by name (case-insensitive). Falls back to default."""
+def get_theme(name: str | None = None) -> Theme:
+    """Fetch theme by name (case-insensitive). Falls back to default.
+
+    Calling ``get_theme()`` with no argument returns the default theme.
+    """
+    if name is None:
+        return THEMES[DEFAULT_THEME]
     key = name.lower().strip()
     if key in THEMES:
         return THEMES[key]
