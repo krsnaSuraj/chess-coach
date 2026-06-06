@@ -19,7 +19,11 @@ pip install -e .
 
 > Installs the `chess_coach` package in editable mode + `chess-coach` CLI entry point.
 
-### 2. Download Stockfish
+### 2. (Optional) Download Stockfish
+
+Chess Coach v3.0+ has a **one-shot auto-installer** that fetches Stockfish 18, Lc0 v0.32.1 and Maia-1 weights on first run. Nothing to do.
+
+If you prefer manual setup, the old way still works:
 
 | OS | Method |
 |----|--------|
@@ -27,10 +31,19 @@ pip install -e .
 | **macOS** | `brew install stockfish` |
 | **Linux** | `sudo apt-get install stockfish` or `dnf install stockfish` |
 
+CLI helpers:
+
+```bash
+python -m chess_coach --check      # verify deps
+python -m chess_coach --install    # force re-install
+python scripts/install_deps.py --help   # full options
+```
+
 ### 3. Verify
 
 ```bash
-python -c "import chess_coach; print('OK:', chess_coach.__all__)"
+python -c "import chess_coach; print('OK:', len(chess_coach.__all__), 'public symbols')"
+python -m chess_coach --check
 ```
 
 ---

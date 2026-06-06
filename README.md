@@ -21,7 +21,7 @@
 
 Chess Coach is a professional real-time chess analysis sidekick that integrates **Stockfish 18** (and optionally **Maia-1** for human-policy priors) into a dual-interface application. v3.0 adds a **6-layer anti-detection architecture** so you can play chess.com without re-banning: multi-engine analysis, CAPS V2 classification, 5 style personalities, motif detection, opponent ELO modelling, and a chess.com-style risk score.
 
-It evaluates positions exclusively during **your turn**, detects blunders and missed opportunities, suggests best moves with visual arrows, presents principal variation lines, and identifies openings via a **500-entry ECO database** — while staying completely silent when you manually enter opponent moves.
+It evaluates positions exclusively during **your turn**, detects blunders and missed opportunities, suggests best moves with visual arrows, presents principal variation lines, and identifies openings via a **509-entry ECO database** — while staying completely silent when you manually enter opponent moves.
 
 ### v3.0 "The Humanizer" Highlights
 
@@ -41,7 +41,7 @@ It evaluates positions exclusively during **your turn**, detects blunders and mi
 | Interface | Use Case |
 |-----------|----------|
 | **Desktop GUI** (PyQt6) | Full-featured analysis with premium UI, glass sidebar, animated eval bar, piece slide animation, coach dashboard, move history |
-| **Web Interface** (FastAPI) | Lightweight browser access — play on PC, analyze on phone (same LAN) with 6 REST endpoints |
+| **Web Interface** (FastAPI) | Lightweight browser access — play on PC, analyze on phone (same LAN) with 7 REST endpoints |
 
 ---
 
@@ -291,7 +291,7 @@ graph TB
 chess-coach/
 │
 ├── src/chess_coach/              # Python package
-│   ├── __init__.py               # Public API exports (19 symbols: 4 config + 2 game + 2 ECO + 6 GUI + 2 server + 3 PGN)
+│   ├── __init__.py               # Public API exports (85 symbols across 22 modules)
 │   ├── __main__.py               # CLI entry: python -m chess_coach [web]
 │   ├── config.py                 # YAML loader, port probe, IP lookup
 │   ├── game_controller.py        # Shared game state, undo/redo, phases, cache
@@ -300,21 +300,48 @@ chess-coach/
 │   ├── coach_dashboard.py        # Glass sidebar: animated eval bar, feedback, opening
 │   ├── promotion_dialog.py       # Underpromotion choice dialog (Q/R/B/K)
 │   ├── main_window.py            # Wires board + dashboard + engine + menus + sounds
-│   ├── server.py                 # FastAPI web server, 6 REST endpoints, CORS
+│   ├── server.py                 # FastAPI web server, 7 REST endpoints, CORS
 │   ├── eco_handler.py            # ECO opening detection (longest-prefix match)
-│   ├── eco_data.py               # 500-entry ECO database (A00–E99, all covered)
+│   ├── eco_data.py               # 509-entry ECO database (A00–E99, all covered)
 │   ├── sound_manager.py          # WAV generation + QSoundEffect playback
-│   └── pgn_handler.py            # PGN export/import utilities
+│   ├── pgn_handler.py            # PGN export/import utilities
+│   ├── elo_calibrator.py         # Bayesian ELO estimator + 10 think profiles
+│   ├── personality.py            # 5 personality profiles + move bias
+│   ├── maia_engine.py            # Lc0 + Maia-1 wrapper (human policy)
+│   ├── caps.py                   # V2 Expected Points classifier
+│   ├── motif_detector.py         # 8 tactical pattern detectors
+│   ├── opponent_modeler.py       # Bayesian ELO + style classifier
+│   ├── anti_cheat_risk.py        # 7-signal risk scorer
+│   ├── humanizer.py              # Move selection + think time sim
+│   └── multi_engine_handler.py   # SF + Maia parallel orchestration
 │
-├── tests/                        # 68 tests with pytest
+├── scripts/
+│   └── install_deps.py           # One-shot auto-installer for SF+Lc0+Maia
+│
+├── tests/                        # 199 tests with pytest
+│   ├── conftest.py
 │   ├── test_config.py            # Config loading, type validation, error handling
 │   ├── test_game_controller.py   # Board state, undo/redo, phases, transitions
 │   ├── test_eco.py               # ECO database integrity + opening detection (13 tests)
-│   └── test_pgn_handler.py       # PGN export/import roundtrip (19 tests)
+│   ├── test_pgn_handler.py       # PGN export/import roundtrip (19 tests)
+│   ├── test_caps.py              # CAPS V2 classifier, EP thresholds, classifications
+│   ├── test_elo_calibrator.py    # 10 ELO bands, Bayesian estimator, think profiles
+│   ├── test_humanizer.py         # Move selection, oscillation penalty, think time
+│   ├── test_maia_engine.py       # Lc0/Maia wrappers, find_lc0, find_maia_weights
+│   ├── test_motif_detector.py    # 8 motif detectors (pins, forks, skewers, ...)
+│   ├── test_multi_engine_handler.py  # Parallel SF+Maia orchestration
+│   ├── test_opponent_modeler.py  # Bayesian ELO + style classification
+│   ├── test_anti_cheat_risk.py   # 7-signal risk scorer
+│   └── test_personality.py       # 5 personality profiles + move bias
+│
+├── docs/
+│   ├── HUMANIZER.md              # 6-layer anti-detection philosophy
+│   ├── ARCHITECTURE_V3.md        # v3.0 module index + data flow
+│   └── MODELS.md                 # Lc0/Maia licensing + versions
 │
 ├── static/                       # Web frontend
 ├── screenshots/                  # App screenshots
-├── config.yaml                   # Engine & display settings
+├── config.yaml                   # Engine & humanizer settings
 ├── pyproject.toml                # Modern Python packaging (PEP 621)
 ├── requirements.txt              # Python dependencies
 ├── ARCHITECTURE.md               # System architecture (this file)
@@ -339,14 +366,14 @@ chess-coach/
 | **Sound** | PyQt6.QtMultimedia (QSoundEffect) | Move click sound (auto-generated WAV) |
 | **AI/Detection** | ECO database (500 entries) | Opening name recognition via longest-prefix match |
 | **Configuration** | PyYAML | `config.yaml` parsing with type validation |
-| **Testing** | pytest | 68 tests, 10 test classes |
+| **Testing** | pytest | 199 tests, 14 test files |
 
 ---
 
 ## 🧪 Testing
 
 ```bash
-pytest                  # Run all 68 tests
+pytest                  # Run all 199 tests
 pytest -v               # Verbose output
 pytest --cov=chess_coach # Coverage report
 ```
