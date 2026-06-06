@@ -111,6 +111,249 @@ def health_check() -> dict:
     return {"status": "ok", "engine_running": eng is not None}
 
 
+# --- v3.0 AI Coach endpoints ---
+
+class AccuracyRequest(BaseModel):
+    eval_history: list[dict]   # list of {before, after, side}
+
+
+@app.post("/api/coach/accuracy")
+def post_coach_accuracy(request: AccuracyRequest) -> dict:
+    """Compute Lichess-style centipawn loss accuracy from eval history."""
+    from chess_coach.accuracy import game_accuracy, rating_from_accuracy
+    history = [(h["before"], h["after"], h["side"]) for h in request.eval_history]
+    result = game_accuracy(history)
+    result["rating_estimate"] = rating_from_accuracy(result["accuracy_pct"])
+    return result
+
+
+@app.get("/api/coach/critical_moments")
+def get_coach_critical_moments(min_swing: float = 100.0) -> dict:
+    """Find critical moments in the current game."""
+    from chess_coach.critical_moments import find_critical_moments, summarize_critical_moments
+    with game_controller.lock:
+        board = game_controller.board.copy()
+    # Reconstruct positions from move stack
+    positions = []
+    temp = chess.Board()
+    for mv in board.move_stack:
+        prev_eval = 0  # placeholder; real impl would store evals
+        positions.append({
+            "fen": temp.fen(),
+            "prev_eval_cp": prev_eval,
+            "side_just_moved": temp.turn,
+        })
+        temp.push(mv)
+        positions[-1]["eval_cp"] = 0
+        positions[-1]["move_played"] = temp.san(mv)
+    moments = find_critical_moments(positions, min_swing_cp=min_swing)
+    summary = summarize_critical_moments(moments)
+    return {
+        "summary": summary,
+        "moments": [m.to_dict() for m in moments],
+    }
+
+
+class PlanRequest(BaseModel):
+    fen: str
+    pv: list[str]   # UCI moves
+
+
+@app.post("/api/coach/plan")
+def post_coach_plan(request: PlanRequest) -> dict:
+    """Extract a human-readable plan from a principal variation."""
+    from chess_coach.plan_extractor import extract_plan
+    import chess
+    board = chess.Board(request.fen)
+    pv_moves = []
+    for uci in request.pv:
+        try:
+            mv = chess.Move.from_uci(uci)
+            if mv in board.legal_moves:
+                pv_moves.append(mv)
+                board.push(mv)
+        except Exception:
+            break
+    board = chess.Board(request.fen)  # reset
+    plan = extract_plan(board, pv_moves)
+    return plan.to_dict()
+
+
+class BlunderRequest(BaseModel):
+    fen_before: str
+    move_uci: str
+    eval_before_cp: float
+    eval_after_cp: float
+    best_move_uci: str | None = None
+    best_eval_cp: float | None = None
+    time_remaining_s: float | None = None
+
+
+@app.post("/api/coach/blunder")
+def post_coach_blunder(request: BlunderRequest) -> dict:
+    """Classify a blunder into a category with explanation."""
+    from chess_coach.blunder_explainer import classify_blunder
+    import chess
+    board = chess.Board(request.fen_before)
+    try:
+        move = chess.Move.from_uci(request.move_uci)
+        if move not in board.legal_moves:
+            return {"error": "illegal move"}
+        best_move = None
+        if request.best_move_uci:
+            best_move = chess.Move.from_uci(request.best_move_uci)
+        report = classify_blunder(
+            board, move,
+            request.eval_before_cp, request.eval_after_cp,
+            best_move, request.best_eval_cp,
+            request.time_remaining_s,
+        )
+        return report.to_dict()
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/api/coach/patterns")
+def get_coach_patterns() -> dict:
+    """Detect tactical patterns in the current position."""
+    from chess_coach.pattern_detector import detect_all_patterns
+    with game_controller.lock:
+        board = game_controller.board.copy()
+    patterns = detect_all_patterns(board)
+    return {
+        "fen": board.fen(),
+        "patterns": [p.to_dict() for p in patterns],
+    }
+
+
+# --- v3.0 Puzzles ---
+
+@app.get("/api/puzzles")
+def get_puzzles(theme: str | None = None, difficulty: int | None = None) -> dict:
+    """Get the puzzle list, optionally filtered."""
+    from chess_coach.puzzle import get_all_puzzles, get_puzzles_by_theme, get_puzzles_by_difficulty
+    if theme:
+        puzzles = get_puzzles_by_theme(theme)
+    elif difficulty is not None:
+        puzzles = get_puzzles_by_difficulty(difficulty)
+    else:
+        puzzles = get_all_puzzles()
+    return {
+        "count": len(puzzles),
+        "puzzles": [p.to_dict() for p in puzzles],
+    }
+
+
+# IMPORTANT: /api/puzzles/random must be declared BEFORE /api/puzzles/{puzzle_id}
+# so FastAPI doesn't try to look up "random" as a puzzle ID.
+@app.get("/api/puzzles/random")
+def get_random_puzzle(theme: str | None = None, seed: int | None = None) -> dict:
+    from chess_coach.puzzle import get_puzzles_by_theme, get_all_puzzles
+    if theme:
+        pool = get_puzzles_by_theme(theme)
+    else:
+        pool = get_all_puzzles()
+    if not pool:
+        return {"error": "no puzzles match"}
+    import random
+    p = random.choice(pool) if seed is None else pool[seed % len(pool)]
+    return p.to_dict()
+
+
+@app.get("/api/puzzles/{puzzle_id}")
+def get_puzzle(puzzle_id: str) -> dict:
+    from chess_coach.puzzle import get_puzzle_by_id
+    p = get_puzzle_by_id(puzzle_id)
+    if p is None:
+        return {"error": "not found"}
+    return p.to_dict()
+
+
+# --- v3.0 Engine match ---
+
+class EngineMatchRequest(BaseModel):
+    personality: str = "tactical"
+    target_elo: int = 1500
+    color: str = "b"   # human is the other color
+
+
+@app.post("/api/engine_match/start")
+def engine_match_start(request: EngineMatchRequest) -> dict:
+    from chess_coach.engine_match import EngineMatch, MatchConfig, PERSONALITIES
+    if request.personality not in PERSONALITIES:
+        return {"error": f"unknown personality: {request.personality}"}
+    try:
+        cfg = MatchConfig(
+            personality=request.personality,
+            target_elo=request.target_elo,
+            color=request.color,
+        )
+    except ValueError as e:
+        return {"error": str(e)}
+    return {
+        "ok": True,
+        "config": {
+            "personality": cfg.personality,
+            "personality_name": PERSONALITIES[cfg.personality]["name"],
+            "target_elo": cfg.target_elo,
+            "color": cfg.color,
+        },
+    }
+
+
+@app.get("/api/engine_match/personalities")
+def get_personalities() -> dict:
+    from chess_coach.engine_match import PERSONALITIES
+    return {
+        "personalities": [
+            {
+                "id": k,
+                "name": v["name"],
+                "icon": v["icon"],
+                "description": v["description"],
+            }
+            for k, v in PERSONALITIES.items()
+        ]
+    }
+
+
+# --- v3.0 PGN Export ---
+
+class PGNExportRequest(BaseModel):
+    moves: list[dict]   # list of {ply, san, fen_after, eval_cp?, cpl?, accuracy_pct?, classification?, commentary?}
+    white: str = "Human"
+    black: str = "Engine"
+    event: str = "Chess Coach v3.0.0 Review"
+    eco: str = "?"
+    opening: str = "?"
+    time_control: str = "?"
+    result: str = "*"
+    overall_accuracy: float | None = None
+    critical_moments_count: int = 0
+    rating_estimate: int = 0
+
+
+@app.post("/api/export/pgn")
+def export_pgn_endpoint(request: PGNExportRequest) -> dict:
+    from chess_coach.review_exporter import (
+        export_pgn, ExportMove, ExportConfig
+    )
+    moves = [ExportMove(
+        ply=m["ply"], san=m["san"], fen_after=m.get("fen_after", ""),
+        eval_cp=m.get("eval_cp"), cpl=m.get("cpl"),
+        accuracy_pct=m.get("accuracy_pct"),
+        classification=m.get("classification"),
+        commentary=m.get("commentary"),
+    ) for m in request.moves]
+    cfg = ExportConfig(
+        event=request.event, white=request.white, black=request.black,
+        eco=request.eco, opening=request.opening,
+        time_control=request.time_control, result=request.result,
+    )
+    pgn = export_pgn(moves, cfg)
+    return {"pgn": pgn, "size": len(pgn)}
+
+
 # --- v3.0 Humanizer endpoints ---
 
 class HumanizerConfigRequest(BaseModel):
