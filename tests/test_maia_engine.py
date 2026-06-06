@@ -44,13 +44,15 @@ class TestMaiaWeightURLs:
 
 
 class TestFindLc0:
-    def test_returns_none_if_missing(self, tmp_path) -> None:
+    def test_returns_none_if_missing(self, tmp_path, monkeypatch) -> None:
+        monkeypatch.chdir(tmp_path)
         result = find_lc0(str(tmp_path / "nonexistent.exe"))
         assert result is None
 
 
 class TestFindMaiaWeights:
-    def test_returns_none_if_dir_missing(self, tmp_path) -> None:
+    def test_returns_none_if_dir_missing(self, tmp_path, monkeypatch) -> None:
+        monkeypatch.chdir(tmp_path)
         result = find_maia_weights(1500, str(tmp_path / "no_such_dir"))
         assert result is None
 

@@ -3,6 +3,9 @@
 v3.0 adds a 6-layer anti-detection architecture (multi-engine, CAPS, humanizer,
 personality, motif, risk) so users can play chess.com without re-banning.
 
+On first run, the app auto-downloads Stockfish 18, Lc0 v0.32.1 and Maia-1 weights
+into ./lc0/ and verifies them. No manual setup needed.
+
 Usage:
   python -m chess_coach                       Desktop GUI mode
   python -m chess_coach web                   Web server mode (http://localhost:8000)
@@ -10,6 +13,8 @@ Usage:
   python -m chess_coach --personality aggressive --elo 1500
                                                Start with personality + target ELO
   python -m chess_coach --no-maia             Run without Maia (Stockfish only)
+  python -m chess_coach --install             Force re-install Stockfish/Lc0/Maia
+  python -m chess_coach --check               Just check dependencies, don't run
 """
 
 from __future__ import annotations
@@ -29,6 +34,47 @@ def _init_logging() -> None:
             datefmt="%H:%M:%S",
         )
         logging_configured = True
+
+
+def _ensure_dependencies(force: bool = False, verbose: bool = True) -> bool:
+    """Auto-install Stockfish + Lc0 + Maia if missing. Returns True on success.
+
+    Runs scripts/install_deps.py. Skipped if running under PyInstaller.
+    """
+    from pathlib import Path
+    if getattr(sys, "frozen", False):
+        return True
+    project_root = Path(__file__).resolve().parent.parent.parent
+    installer = project_root / "scripts" / "install_deps.py"
+    if not installer.exists():
+        if verbose:
+            print(f"[v3.0] installer missing: {installer}", file=sys.stderr)
+        return False
+    args = [sys.executable, str(installer)]
+    if force:
+        args.append("--force")
+    if verbose:
+        print("[v3.0] Ensuring dependencies (Stockfish 18, Lc0 v0.32.1, Maia-1)...")
+    import subprocess
+    try:
+        result = subprocess.run(
+            args,
+            cwd=str(project_root),
+            stdout=None if verbose else subprocess.DEVNULL,
+            stderr=subprocess.STDOUT,
+        )
+        return result.returncode == 0
+    except Exception as e:
+        if verbose:
+            print(f"[v3.0] auto-install failed: {e}", file=sys.stderr)
+        return False
+
+
+def _quick_check() -> bool:
+    """Quick check: Stockfish exists (Lc0/Maia optional)."""
+    from pathlib import Path
+    project_root = Path(__file__).resolve().parent.parent.parent
+    return (project_root / "stockfish.exe").exists()
 
 
 def _parse_humanizer_args(args: list[str]) -> dict:
@@ -66,6 +112,19 @@ def main() -> None:
     if "-h" in args or "--help" in args:
         print(__doc__)
         return
+
+    if "--check" in args:
+        ok = _quick_check()
+        print(f"Stockfish present: {ok}")
+        sys.exit(0 if ok else 1)
+
+    if "--install" in args:
+        ok = _ensure_dependencies(force=True, verbose=True)
+        sys.exit(0 if ok else 1)
+
+    # First-run auto-install: silent if everything is fine, loud if anything is missing
+    if not _quick_check():
+        _ensure_dependencies(force=False, verbose=True)
 
     h_args = _parse_humanizer_args(args)
     if h_args:
