@@ -100,6 +100,31 @@ class CoachDashboard(QFrame):
         self.lbl_feedback.setAlignment(Qt.AlignmentFlag.AlignTop)
         layout.addWidget(self.lbl_feedback, stretch=1)
 
+        s_caps = QLabel("CAPS CLASSIFICATION")
+        s_caps.setObjectName("section")
+        layout.addWidget(s_caps)
+        self.lbl_caps = QLabel("—")
+        self.lbl_caps.setObjectName("caps")
+        self.lbl_caps.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.lbl_caps)
+
+        s_motifs = QLabel("TACTICAL MOTIFS")
+        s_motifs.setObjectName("section")
+        layout.addWidget(s_motifs)
+        self.lbl_motifs = QLabel("—")
+        self.lbl_motifs.setObjectName("motifs")
+        self.lbl_motifs.setStyleSheet(f"color: {COLORS['text_dim']}; font-size: 9px;")
+        self.lbl_motifs.setWordWrap(True)
+        layout.addWidget(self.lbl_motifs)
+
+        s_risk = QLabel("ANTI-CHEAT RISK")
+        s_risk.setObjectName("section")
+        layout.addWidget(s_risk)
+        self.lbl_risk = QLabel("SAFE")
+        self.lbl_risk.setObjectName("risk")
+        self.lbl_risk.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.lbl_risk)
+
     def _base_style(self) -> str:
         return f"""
             QFrame {{

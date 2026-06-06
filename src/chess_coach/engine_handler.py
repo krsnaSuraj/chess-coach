@@ -7,20 +7,40 @@ import chess
 import chess.engine
 from PyQt6.QtCore import QThread, pyqtSignal, QObject
 
+from chess_coach.multi_engine_handler import (
+    MultiEngineHandler,
+    MultiEngineConfig,
+    MaiaConfig,
+    StockfishAnalysisThread,
+)
+
 logger = logging.getLogger(__name__)
 
 
 class EngineHandler(QObject):
+    """v3.0 EngineHandler — backwards-compatible facade over MultiEngineHandler.
+
+    Preserves the v2.0 public API (start_engine / start_analysis / stop_engine
+    / analysis_update / error_occurred signals). Internally delegates to
+    MultiEngineHandler so v2.0 callers (server.py, main_window.py) keep
+    working unchanged.
+
+    Maia is *disabled* by default in this facade to keep the desktop startup
+    snappy; enable it via `enable_maia=True` in the constructor.
+    """
+
     analysis_update = pyqtSignal(dict)
     error_occurred = pyqtSignal(str)
 
-    def __init__(self, config: dict) -> None:
+    def __init__(self, config: dict, enable_maia: bool = False) -> None:
         super().__init__()
         self.config = config
         self.engine_path: str = config.get("engine", {}).get("path", "stockfish.exe")
         self.engine: chess.engine.SimpleEngine | None = None
         self.analysis_thread: AnalysisThread | None = None
         self.pending_board: chess.Board | None = None
+        self._multi: MultiEngineHandler | None = None
+        self._enable_maia = enable_maia
 
     def _ensure_engine_alive(self) -> bool:
         if self.engine is None:
@@ -74,6 +94,9 @@ class EngineHandler(QObject):
             except Exception as e:
                 logger.warning("Error stopping engine: %s", e)
             self.engine = None
+        if self._multi is not None:
+            self._multi.close()
+            self._multi = None
 
     def start_analysis(self, board: chess.Board) -> None:
         if not self._ensure_engine_alive():

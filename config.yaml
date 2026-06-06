@@ -15,3 +15,31 @@ display:
   dot_color: "#646464"
   capture_ring_color: "#323232"
   last_move_color: "#FFFF64"
+
+# Chess Coach v3.0 "The Humanizer" configuration.
+# All values have safe defaults; remove this block to revert to v2.0 behaviour.
+humanizer:
+  # Personality style for move bias
+  personality: "balanced"     # aggressive | positional | tactical | defensive | balanced
+  # Target human ELO — controls depth, think time, ACPL targets
+  target_elo: 1500            # 800-2400
+  # Maia/Lc0 neural policy engine
+  maia:
+    enabled: true             # auto-disable if Lc0/Maia missing
+    auto_download: true       # download Lc0 v0.32.1 + Maia weights on first run
+    lc0_path: "lc0/lc0.exe"
+    weights_dir: "lc0/weights"
+    elo: 1500                 # closest of 1100-1900 in steps of 100
+    nodes: 1                  # policy only, no search
+    threads: 1
+    backend: "trivial"        # trivial | blas | dnnl (CPU)
+  # Move selection weights — how much each signal influences choice
+  maia_weight: 0.55          # 0.0-1.0, weight on Maia policy
+  personality_weight: 0.25   # 0.0-1.0, weight on personality bias
+  engine_weight: 0.20        # 0.0-1.0, weight on Stockfish top-N ordering
+  blend_top_n: 5             # consider top-5 SF candidates
+  temperature: 0.85          # softmax temperature; >1 = more random
+  style_consistency: 0.70    # 0.0-1.0; loosens oscillation penalty
+  # Realistic think-time simulation
+  simulated_think_time: true
+  time_pressure_threshold: 30.0  # seconds; below this boosts temperature

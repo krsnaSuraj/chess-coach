@@ -1,15 +1,15 @@
 <div align="center">
 
-# ♟️ Chess Coach
+# ♟️ Chess Coach v3.0 — "The Humanizer"
 
-**Professional real-time chess analysis sidekick · Desktop GUI & Web Interface**
+**Anti-detection real-time chess sidekick · Stockfish 18 + optional Maia-1/Lc0**
 
 [![Python](https://img.shields.io/badge/Python-3.10+-blue?logo=python&logoColor=white)](https://python.org)
 [![PyQt6](https://img.shields.io/badge/GUI-PyQt6-41CD52?logo=qt&logoColor=white)](https://www.riverbankcomputing.com/software/pyqt/)
 [![FastAPI](https://img.shields.io/badge/Web-FastAPI-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
 [![Stockfish](https://img.shields.io/badge/Engine-Stockfish_18-FF6600?logo=chess&logoColor=white)](https://stockfishchess.org)
 [![License](https://img.shields.io/badge/license-MIT-808080)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-68_passing-3fb950)](#-testing)
+[![Tests](https://img.shields.io/badge/tests-199_passing-3fb950)](#-testing)
 
 [Features](#-features) · [Quick Start](#-quick-start) · [Usage](#-usage) · [Configuration](#%EF%B8%8F-configuration) · [Architecture](#-architecture) · [Tech Stack](#-tech-stack)
 
@@ -19,7 +19,20 @@
 
 ## 🎯 Overview
 
-Chess Coach is a professional real-time chess analysis sidekick that integrates **Stockfish 18** into a dual-interface application. It evaluates positions exclusively during **your turn**, detects blunders and missed opportunities, suggests best moves with visual arrows, presents principal variation lines, and identifies openings via a **500-entry ECO database** — while staying completely silent when you manually enter opponent moves.
+Chess Coach is a professional real-time chess analysis sidekick that integrates **Stockfish 18** (and optionally **Maia-1** for human-policy priors) into a dual-interface application. v3.0 adds a **6-layer anti-detection architecture** so you can play chess.com without re-banning: multi-engine analysis, CAPS V2 classification, 5 style personalities, motif detection, opponent ELO modelling, and a chess.com-style risk score.
+
+It evaluates positions exclusively during **your turn**, detects blunders and missed opportunities, suggests best moves with visual arrows, presents principal variation lines, and identifies openings via a **500-entry ECO database** — while staying completely silent when you manually enter opponent moves.
+
+### v3.0 "The Humanizer" Highlights
+
+* **Multi-engine**: Stockfish 18 (depth-based) + Maia-1 (neural policy) running in parallel
+* **CAPS V2**: 8-tier move classification (Brilliant / Great / Best / Excellent / Good / Inaccuracy / Mistake / Blunder)
+* **5 personalities**: Aggressive, Positional, Tactical, Defensive, Balanced — each with its own move-bias dict and ECO preferences
+* **Anti-cheat risk score**: 0-100 with 7 chess.com-style signals (top-1 match, CPL, time variance, style, tactical, blunder freq, phase variance)
+* **Bayesian opponent modeler**: estimates opponent ELO and style from observed moves
+* **Motif detector**: pin, fork, skewer, discovered attack, deflection, decoy, back-rank, zwischenzug
+* **Graceful degradation**: works with Stockfish-only if Lc0/Maia are missing
+* **Desktop + Web UI**: 4 new v3.0 cards in the browser (CAPS, Motifs, Risk, ELO)
 
 **Perfect for:** Online chess (chess.com, lichess) where you play one side and want expert-level guidance without distraction.
 

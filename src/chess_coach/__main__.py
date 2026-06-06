@@ -1,9 +1,15 @@
-"""Chess Coach — Real-time chess analysis sidekick.
+"""Chess Coach v3.0 "The Humanizer" — Real-time chess analysis sidekick.
+
+v3.0 adds a 6-layer anti-detection architecture (multi-engine, CAPS, humanizer,
+personality, motif, risk) so users can play chess.com without re-banning.
 
 Usage:
-  python -m chess_coach          Desktop GUI mode
-  python -m chess_coach web      Web server mode (http://localhost:8000)
-  python -m chess_coach web 8080 Web server on custom port
+  python -m chess_coach                       Desktop GUI mode
+  python -m chess_coach web                   Web server mode (http://localhost:8000)
+  python -m chess_coach web 8080              Web server on custom port
+  python -m chess_coach --personality aggressive --elo 1500
+                                               Start with personality + target ELO
+  python -m chess_coach --no-maia             Run without Maia (Stockfish only)
 """
 
 from __future__ import annotations
@@ -25,17 +31,57 @@ def _init_logging() -> None:
         logging_configured = True
 
 
+def _parse_humanizer_args(args: list[str]) -> dict:
+    """Parse --personality, --elo, --no-maia, --no-humanizer flags."""
+    out: dict = {}
+    i = 0
+    while i < len(args):
+        a = args[i]
+        if a == "--personality" and i + 1 < len(args):
+            out["personality"] = args[i + 1]
+            i += 2
+        elif a == "--elo" and i + 1 < len(args):
+            try:
+                out["target_elo"] = int(args[i + 1])
+            except ValueError:
+                pass
+            i += 2
+        elif a == "--no-maia":
+            out["enable_maia"] = False
+            i += 1
+        elif a == "--no-humanizer":
+            out["simulated_think_time"] = False
+            i += 1
+        else:
+            i += 1
+    return out
+
+
 def main() -> None:
     _init_logging()
 
-    args = [a.lower() for a in sys.argv[1:]]
+    args = [a for a in sys.argv[1:]]
     mode = "desktop"
 
     if "-h" in args or "--help" in args:
         print(__doc__)
         return
 
-    if "web" in args or "server" in args or "--web" in args:
+    h_args = _parse_humanizer_args(args)
+    if h_args:
+        from chess_coach.config import load_config, save_config
+        cfg = load_config()
+        h = cfg.setdefault("humanizer", {})
+        for k, v in h_args.items():
+            if k in ("enable_maia",):
+                cfg[k] = v
+            else:
+                h[k] = v
+        save_config(cfg)
+        print(f"[v3.0] Applied: {h_args}")
+
+    remaining = [a.lower() for a in args if not a.startswith("--") and a not in h_args.values()]
+    if "web" in remaining or "server" in remaining:
         mode = "web"
 
     if mode == "desktop":
@@ -52,7 +98,7 @@ def main() -> None:
         from chess_coach.config import find_free_port, get_local_ip
 
         port = 8000
-        for a in args:
+        for a in remaining:
             if a.isdigit():
                 port = int(a)
                 break
@@ -63,7 +109,7 @@ def main() -> None:
 
         print()
         print("=" * 50)
-        print("  Chess Coach Web Server is running!")
+        print("  Chess Coach v3.0 Web Server is running!")
         print("=" * 50)
         print(f"  PC:  http://localhost:{port}")
         print(f"  Phone:  http://{local_ip}:{port}")

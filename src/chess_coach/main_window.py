@@ -8,7 +8,8 @@ import logging
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QListWidget, QMessageBox, QPushButton, QInputDialog, QMenuBar, QMenu,
-    QFileDialog,
+    QFileDialog, QSlider, QDialog, QFormLayout, QDialogButtonBox, QCheckBox,
+    QComboBox,
 )
 from PyQt6.QtGui import QShortcut, QKeySequence, QAction, QCloseEvent
 from PyQt6.QtCore import QTimer
@@ -21,6 +22,8 @@ from chess_coach.eco_handler import get_opening
 from chess_coach.engine_handler import EngineHandler
 from chess_coach.sound_manager import SoundManager
 from chess_coach.pgn_handler import board_to_pgn, pgn_to_moves
+from chess_coach.personality import PersonalityType
+from chess_coach.humanizer import HumanizerConfig
 
 logger = logging.getLogger(__name__)
 
@@ -97,6 +100,15 @@ class MainWindow(QMainWindow):
         new_action.triggered.connect(self._new_game)
         file_menu.addAction(new_action)
         menubar.addMenu(file_menu)
+
+        humanizer_menu = QMenu("Humanizer", self)
+        config_action = QAction("Configure...", self)
+        config_action.triggered.connect(self._open_humanizer_config)
+        humanizer_menu.addAction(config_action)
+        risk_action = QAction("Anti-Cheat Risk Report", self)
+        risk_action.triggered.connect(self._show_risk_report)
+        humanizer_menu.addAction(risk_action)
+        menubar.addMenu(humanizer_menu)
 
     def _export_pgn(self) -> None:
         path, _ = QFileDialog.getSaveFileName(
@@ -745,7 +757,111 @@ class MainWindow(QMainWindow):
     def _on_engine_error(self, msg: str) -> None:
         QMessageBox.warning(self, "Engine Error", msg)
 
+    def _open_humanizer_config(self) -> None:
+        dlg = HumanizerConfigDialog(self.config, self)
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            from chess_coach.config import save_config
+            dlg.apply_to(self.config)
+            save_config(self.config)
+            self.statusBar().showMessage("Humanizer config saved", 3000)
+
+    def _show_risk_report(self) -> None:
+        history = self._collect_history_for_risk()
+        from chess_coach.anti_cheat_risk import update_risk_from_history
+        target = getattr(self.config, "humanizer", None)
+        target_elo = target.target_elo if target else 1500
+        result = update_risk_from_history(history, target_elo=target_elo)
+        msg = (
+            f"<h2>Anti-Cheat Risk</h2>"
+            f"<p><b>Score:</b> {result.score:.1f} / 100 — {result.label}</p>"
+            f"<p><b>Recommendation:</b><br>{result.recommendation}</p>"
+            f"<h3>Signal Contributions</h3><ul>"
+        )
+        for k, v in result.contributions.items():
+            msg += f"<li>{k}: {v:.1f}</li>"
+        msg += "</ul>"
+        QMessageBox.information(self, "Anti-Cheat Risk", msg)
+
+    def _collect_history_for_risk(self) -> list[dict]:
+        out: list[dict] = []
+        for i in range(self.board.fullmove_number):
+            for color in (chess.WHITE, chess.BLACK):
+                pass
+        from chess_coach.caps import classify_from_engine_info
+        from chess_coach.elo_calibrator import get_acpl_target
+        target_elo = getattr(self.config, "humanizer", None)
+        target_elo_val = target_elo.target_elo if target_elo else 1500
+        target_cpl = get_acpl_target(target_elo_val).overall
+        move_times: list[float] = []
+        for mv in self.board.move_stack:
+            out.append({"cpl": target_cpl, "time_s": 5.0, "is_top1": False, "phase": "middlegame"})
+        return out
+
     def closeEvent(self, event: QCloseEvent | None) -> None:
         self._heartbeat.stop()
         self.engine_handler.stop_engine()
         event.accept()
+
+
+class HumanizerConfigDialog(QDialog):
+    """Configure humanizer personality, target ELO, and Maia integration."""
+
+    PERSONALITY_CHOICES = [
+        ("Balanced", PersonalityType.BALANCED),
+        ("Aggressive", PersonalityType.AGGRESSIVE),
+        ("Positional", PersonalityType.POSITIONAL),
+        ("Tactical", PersonalityType.TACTICAL),
+        ("Defensive", PersonalityType.DEFENSIVE),
+    ]
+
+    def __init__(self, config, parent=None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Humanizer Configuration")
+        self._config = config
+
+        form = QFormLayout(self)
+        self.cmb_personality = QComboBox()
+        for label, val in self.PERSONALITY_CHOICES:
+            self.cmb_personality.addItem(label, val)
+        current = getattr(config, "humanizer", None)
+        current_personality = current.personality if current else PersonalityType.BALANCED
+        for i, (_, val) in enumerate(self.PERSONALITY_CHOICES):
+            if val == current_personality:
+                self.cmb_personality.setCurrentIndex(i)
+                break
+        form.addRow("Personality:", self.cmb_personality)
+
+        self.slider_elo = QSlider()
+        self.slider_elo.setOrientation(Qt.Orientation.Horizontal)  # type: ignore[attr-defined]
+        from PyQt6.QtCore import Qt
+        self.slider_elo.setOrientation(Qt.Orientation.Horizontal)
+        self.slider_elo.setMinimum(800)
+        self.slider_elo.setMaximum(2400)
+        self.slider_elo.setSingleStep(50)
+        self.slider_elo.setPageStep(100)
+        self.slider_elo.setValue(current.target_elo if current else 1500)
+        form.addRow("Target ELO:", self.slider_elo)
+
+        self.chk_maia = QCheckBox("Enable Maia (if installed)")
+        self.chk_maia.setChecked(getattr(config, "enable_maia", True))
+        form.addRow(self.chk_maia)
+
+        self.chk_think_time = QCheckBox("Simulate human think-time")
+        self.chk_think_time.setChecked(current.simulated_think_time if current else True)
+        form.addRow(self.chk_think_time)
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        form.addRow(buttons)
+
+    def apply_to(self, config) -> None:
+        from dataclasses import asdict
+        if not hasattr(config, "humanizer") or config.humanizer is None:
+            config.humanizer = HumanizerConfig()
+        config.humanizer.personality = self.cmb_personality.currentData()
+        config.humanizer.target_elo = self.slider_elo.value()
+        config.humanizer.simulated_think_time = self.chk_think_time.isChecked()
+        config.enable_maia = self.chk_maia.isChecked()

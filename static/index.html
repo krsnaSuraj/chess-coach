@@ -99,6 +99,31 @@
             z-index: 100;
         }
 
+        .v3-card {
+            flex: 1 1 calc(50% - 8px);
+            min-width: 110px;
+            padding: 8px 6px;
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            text-align: center;
+        }
+        .v3-label {
+            font-size: 0.65rem;
+            color: #8b949e;
+            letter-spacing: 1.5px;
+            margin-bottom: 4px;
+        }
+        .v3-value {
+            font-size: 0.95rem;
+            font-weight: bold;
+            color: #f0f6fc;
+        }
+        #capsVal { color: #58a6ff; }
+        #motifsVal { font-size: 0.7rem; color: #d29922; }
+        #riskVal { color: #3fb950; }
+        #eloVal { color: #a371f7; }
+
         .hidden { display: none !important; }
 
         .btn-reset {
@@ -151,12 +176,31 @@
     <svg id="overlay" viewBox="0 0 100 100" preserveAspectRatio="none"></svg>
 </div>
 
+<div id="v3-panels" style="display:flex; gap:8px; margin-top:14px; flex-wrap:wrap; justify-content:center; max-width:560px;">
+    <div class="v3-card" id="capsCard">
+        <div class="v3-label">CAPS</div>
+        <div class="v3-value" id="capsVal">—</div>
+    </div>
+    <div class="v3-card" id="motifsCard">
+        <div class="v3-label">MOTIFS</div>
+        <div class="v3-value" id="motifsVal">—</div>
+    </div>
+    <div class="v3-card" id="riskCard">
+        <div class="v3-label">RISK</div>
+        <div class="v3-value" id="riskVal">SAFE</div>
+    </div>
+    <div class="v3-card" id="eloCard">
+        <div class="v3-label">ELO</div>
+        <div class="v3-value" id="eloVal">1500</div>
+    </div>
+</div>
+
 <div style="display:flex; gap:8px; margin-top:14px; flex-wrap:wrap; justify-content:center;">
     <button class="btn-reset" onclick="undoMove()" id="btnUndo" style="min-width:100px;">Undo</button>
     <button class="btn-reset" onclick="redoMove()" id="btnRedo" style="min-width:100px;">Redo</button>
     <button class="btn-reset" onclick="location.reload()" style="min-width:100px;">New Game</button>
 </div>
-<div class="footer">Chess Coach &mdash; Powered by Stockfish</div>
+<div class="footer">Chess Coach v3.0 &mdash; Humanizer (Stockfish + Maia optional)</div>
 
 <script src="js/jquery.min.js"></script>
 <script src="js/chess.js"></script>
@@ -341,6 +385,8 @@ function processResponse(data) {
         return;
     }
 
+    fetchV3Panels();
+
     if (data.mode === 'coach') {
         if (data.coach) {
             setStatus("Your Turn");
@@ -469,6 +515,36 @@ function drawArrow(from, to) {
         m.appendChild(p);
         defs.appendChild(m);
         svg.appendChild(defs);
+    }
+}
+
+async function fetchV3Panels() {
+    try {
+        const [caps, motifs, risk, elo] = await Promise.all([
+            fetch('/api/caps/last').then(r => r.json()).catch(() => null),
+            fetch('/api/motifs/position').then(r => r.json()).catch(() => null),
+            fetch('/api/risk/game').then(r => r.json()).catch(() => null),
+            fetch('/api/elo/estimate').then(r => r.json()).catch(() => null),
+        ]);
+        if (caps) {
+            document.getElementById('capsVal').textContent = caps.label || '—';
+            document.getElementById('capsVal').style.color = caps.color || '#58a6ff';
+        }
+        if (motifs && motifs.motifs) {
+            const txt = motifs.motifs.length === 0 ? '—' : motifs.motifs.map(m => m.type).slice(0,2).join(', ');
+            document.getElementById('motifsVal').textContent = txt;
+        }
+        if (risk) {
+            const r = document.getElementById('riskVal');
+            r.textContent = (risk.label || 'SAFE').toUpperCase();
+            r.style.color = risk.level === 'critical' || risk.level === 'high' ? '#f85149'
+                          : risk.level === 'moderate' ? '#d29922' : '#3fb950';
+        }
+        if (elo) {
+            document.getElementById('eloVal').textContent = Math.round(elo.mean_elo || 1500);
+        }
+    } catch (e) {
+        // Silent — panels are optional
     }
 }
 </script>

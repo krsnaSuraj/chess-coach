@@ -111,6 +111,120 @@ def health_check() -> dict:
     return {"status": "ok", "engine_running": eng is not None}
 
 
+# --- v3.0 Humanizer endpoints ---
+
+class HumanizerConfigRequest(BaseModel):
+    personality: str | None = None
+    target_elo: int | None = None
+    enable_maia: bool | None = None
+    simulated_think_time: bool | None = None
+
+
+@app.get("/api/humanizer/config")
+def get_humanizer_config() -> dict:
+    return config.get("humanizer", {})
+
+
+@app.post("/api/humanizer/config")
+def set_humanizer_config(request: HumanizerConfigRequest) -> dict:
+    h = config.setdefault("humanizer", {})
+    if request.personality is not None:
+        h["personality"] = request.personality
+    if request.target_elo is not None:
+        h["target_elo"] = request.target_elo
+    if request.enable_maia is not None:
+        config["enable_maia"] = request.enable_maia
+    if request.simulated_think_time is not None:
+        h["simulated_think_time"] = request.simulated_think_time
+    return h
+
+
+@app.get("/api/caps/last")
+def get_caps_last() -> dict:
+    """Return the CAPS classification of the last move played."""
+    from chess_coach.caps import classify, expected_points_lost, phase_for_move_number
+    from chess_coach.elo_calibrator import get_acpl_target
+    with game_controller.lock:
+        board = game_controller.board.copy()
+    if not board.move_stack:
+        return {"classification": "—", "expected_points_lost": 0.0, "phase": "—"}
+    last = board.move_stack[-1]
+    target_elo = config.get("humanizer", {}).get("target_elo", 1500)
+    target_cpl = get_acpl_target(target_elo).overall
+    # Approximation: assume last move lost ~target_cpl centipawns
+    perspective = not board.turn  # the side that just moved
+    cp_before, cp_after = 0, -target_cpl
+    if perspective == chess.BLACK:
+        cp_before, cp_after = -cp_before, -cp_after
+    epl = expected_points_lost(cp_before, cp_after, perspective)
+    result = classify(cp_before, cp_after, perspective,
+                      phase=phase_for_move_number(board.fullmove_number))
+    return {
+        "move": last.uci(),
+        "classification": result.classification.value,
+        "label": result.label,
+        "color": result.color,
+        "expected_points_lost": round(epl, 4),
+        "phase": result.phase,
+    }
+
+
+@app.get("/api/motifs/position")
+def get_motifs_position() -> dict:
+    """Return detected tactical motifs in the current position."""
+    from chess_coach.motif_detector import detect_all_motifs
+    with game_controller.lock:
+        board = game_controller.board.copy()
+    motifs = detect_all_motifs(board)
+    return {
+        "fen": board.fen(),
+        "motifs": [
+            {"type": m.motif.value, "description": m.description, "squares": [chess.square_name(s) for s in m.squares]}
+            for m in motifs
+        ],
+    }
+
+
+@app.get("/api/risk/game")
+def get_risk_game() -> dict:
+    """Return the current anti-cheat risk for the game so far."""
+    from chess_coach.anti_cheat_risk import update_risk_from_history
+    with game_controller.lock:
+        board = game_controller.board.copy()
+    history = [
+        {"cpl": 30, "time_s": 5.0, "is_top1": False, "phase": "middlegame"}
+        for _ in board.move_stack
+    ]
+    target_elo = config.get("humanizer", {}).get("target_elo", 1500)
+    result = update_risk_from_history(history, target_elo=target_elo)
+    return {
+        "score": round(result.score, 1),
+        "level": result.level.value,
+        "label": result.label,
+        "recommendation": result.recommendation,
+        "contributions": {k: round(v, 1) for k, v in result.contributions.items()},
+    }
+
+
+@app.get("/api/elo/estimate")
+def get_elo_estimate() -> dict:
+    """Return the Bayesian ELO estimate of the current player."""
+    from chess_coach.opponent_modeler import OpponentModel, model_opponent_from_moves
+    from chess_coach.elo_calibrator import BayesianELOEstimator
+    with game_controller.lock:
+        board = game_controller.board.copy()
+    estimator = BayesianELOEstimator()
+    for _ in board.move_stack:
+        estimator.update(30.0)  # placeholder
+    ci = estimator.ci95
+    return {
+        "mean_elo": round(estimator.mean_elo, 1),
+        "ci_low": round(ci[0], 1),
+        "ci_high": round(ci[1], 1),
+        "samples": estimator.n_samples,
+    }
+
+
 @app.post("/api/start_game")
 def start_game(request: StartGameRequest) -> UnifiedResponse:
     try:

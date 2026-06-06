@@ -39,7 +39,51 @@ def load_config(path: str | None = None) -> dict[str, Any]:
         opacity = disp.get("arrow_opacity")
         if opacity is not None and (isinstance(opacity, bool) or not isinstance(opacity, (int, float))):
             raise ConfigError(f"display.arrow_opacity must be a number, got {type(opacity).__name__}")
+    _validate_humanizer(cfg)
     return cfg
+
+
+def _validate_humanizer(cfg: dict) -> None:
+    h = cfg.get("humanizer")
+    if h is None:
+        return
+    if not isinstance(h, dict):
+        raise ConfigError("humanizer section must be a mapping")
+    personality = h.get("personality")
+    if personality is not None:
+        from chess_coach.personality import PersonalityType
+        try:
+            PersonalityType(personality.lower() if isinstance(personality, str) else personality)
+        except ValueError as e:
+            raise ConfigError(f"humanizer.personality invalid: {personality!r}") from e
+    elo = h.get("target_elo")
+    if elo is not None and (not isinstance(elo, int) or elo < 400 or elo > 2800):
+        raise ConfigError(f"humanizer.target_elo must be int 400-2800, got {elo!r}")
+    for key in ("maia_weight", "personality_weight", "engine_weight", "style_consistency", "simulated_think_time", "blend_top_n", "temperature"):
+        val = h.get(key)
+        if val is None:
+            continue
+        if key in ("simulated_think_time",):
+            if not isinstance(val, bool):
+                raise ConfigError(f"humanizer.{key} must be bool, got {type(val).__name__}")
+        elif key == "blend_top_n":
+            if not isinstance(val, int) or val < 2 or val > 20:
+                raise ConfigError(f"humanizer.{key} must be int 2-20, got {val!r}")
+        elif key == "temperature":
+            if not isinstance(val, (int, float)) or val < 0.1 or val > 3.0:
+                raise ConfigError(f"humanizer.{key} must be 0.1-3.0, got {val!r}")
+        else:
+            if not isinstance(val, (int, float)) or val < 0.0 or val > 1.0:
+                raise ConfigError(f"humanizer.{key} must be 0.0-1.0, got {val!r}")
+    maia = h.get("maia")
+    if maia is not None:
+        if not isinstance(maia, dict):
+            raise ConfigError("humanizer.maia must be a mapping")
+        for key in ("enabled", "auto_download"):
+            if key in maia and not isinstance(maia[key], bool):
+                raise ConfigError(f"humanizer.maia.{key} must be bool, got {type(maia[key]).__name__}")
+        if "elo" in maia and (not isinstance(maia["elo"], int) or maia["elo"] < 600 or maia["elo"] > 2800):
+            raise ConfigError(f"humanizer.maia.elo must be 600-2800, got {maia['elo']!r}")
 
 
 def find_free_port(start: int = 8000) -> tuple["socket.socket", int]:
