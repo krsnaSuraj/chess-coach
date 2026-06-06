@@ -46,9 +46,11 @@ htmlcov/
 *.log
 
 # v3.0 Lc0 + Maia binaries (downloaded, not source)
+lc0/
 lc0/*.zip
 lc0/*.exe
 lc0/lc0
+lc0/*.dll
 lc0/weights/*.pb.gz
 lc0/weights/*.pb
 lc0/networks/
