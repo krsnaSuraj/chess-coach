@@ -40,11 +40,34 @@ logger = logging.getLogger(__name__)
 @dataclass
 class MultiEngineConfig:
     sf_path: str = "stockfish.exe"
-    sf_threads: int = 2
-    sf_hash_mb: int = 64
+    sf_threads: int = 2                # 0 = auto-detect (capped at 4 for safety)
+    sf_hash_mb: int = 64               # 0 = auto = 25% of free RAM, capped 4096
     sf_movetime_ms: int = 2000
+    sf_multipv: int = 3                # top-N principal variations
+    sf_show_wdl: bool = True           # UCI_ShowWDL → win/draw/loss %
+    sf_analyse_mode: bool = True       # UCI_AnalyseMode
     maia: MaiaConfig | None = None
     enable_maia: bool = True
+
+
+def _auto_detect_threads() -> int:
+    """Auto-detect safe thread count. Capped at 4 to keep SF responsive."""
+    try:
+        import os as _os
+        n = _os.cpu_count() or 2
+        return min(4, max(1, n))
+    except Exception:
+        return 2
+
+
+def _auto_detect_hash_mb() -> int:
+    """Use 25% of free RAM, capped at 4096 MB."""
+    try:
+        import psutil  # type: ignore
+        free_mb = psutil.virtual_memory().available // (1024 * 1024)
+        return max(64, min(4096, int(free_mb * 0.25)))
+    except Exception:
+        return 256
 
 
 class StockfishAnalysisThread(QThread):
@@ -118,6 +141,11 @@ class MultiEngineHandler(QObject):
     def __init__(self, config: MultiEngineConfig | None = None) -> None:
         super().__init__()
         self.config = config or MultiEngineConfig()
+        # Resolve 0 = auto for threads/hash
+        if self.config.sf_threads <= 0:
+            self.config.sf_threads = _auto_detect_threads()
+        if self.config.sf_hash_mb <= 0:
+            self.config.sf_hash_mb = _auto_detect_hash_mb()
         self._sf_engine: chess.engine.SimpleEngine | None = None
         self._sf_thread: StockfishAnalysisThread | None = None
         self._maia_thread: MaiaAnalysisThread | None = None
@@ -129,6 +157,8 @@ class MultiEngineHandler(QObject):
             self._maia = MaiaEngine(self.config.maia)
             self._maia_available = self._maia.start()
         self._last_maia: dict = {}
+        self._last_wdl: dict = {}        # {"w": 33, "d": 50, "l": 17}
+        self._last_pvs: list[dict] = []  # list of {multipv, score, pv, depth}
 
     @property
     def maia_available(self) -> bool:
@@ -141,6 +171,16 @@ class MultiEngineHandler(QObject):
     @property
     def last_maia_distribution(self) -> dict:
         return self._last_maia
+
+    @property
+    def last_wdl(self) -> dict:
+        """Most recent WDL: {w: int, d: int, l: int} in permille (0-1000)."""
+        return self._last_wdl
+
+    @property
+    def last_pvs(self) -> list[dict]:
+        """List of per-MultiPV entries: {multipv, depth, score_cp, pv: [uci,...]}."""
+        return self._last_pvs
 
     def start_sf(self) -> None:
         try:
@@ -159,10 +199,19 @@ class MultiEngineHandler(QObject):
             self._sf_engine = chess.engine.SimpleEngine.popen_uci(
                 self._sf_path_resolved, startupinfo=startupinfo
             )
-            self._sf_engine.configure({
+            cfg: dict = {
                 "Hash": self.config.sf_hash_mb,
                 "Threads": self.config.sf_threads,
-            })
+                "MultiPV": self.config.sf_multipv,
+            }
+            if self.config.sf_show_wdl:
+                cfg["UCI_ShowWDL"] = True
+            if self.config.sf_analyse_mode:
+                cfg["UCI_AnalyseMode"] = True
+            self._sf_engine.configure(cfg)
+            logger.info("SF configured: threads=%d hash=%d multipv=%d wdl=%s",
+                        self.config.sf_threads, self.config.sf_hash_mb,
+                        self.config.sf_multipv, self.config.sf_show_wdl)
         except Exception as e:
             self.error_occurred.emit(str(e))
             self._sf_engine = None
@@ -247,6 +296,35 @@ class MultiEngineHandler(QObject):
         merged = dict(info)
         if self._last_maia:
             merged["maia_distribution"] = self._last_maia.get("probabilities", {})
+        # Extract WDL if present
+        wdl = info.get("wdl")
+        if wdl is not None:
+            try:
+                self._last_wdl = {"w": int(wdl[0]), "d": int(wdl[1]), "l": int(wdl[2])}
+                merged["wdl"] = self._last_wdl
+            except Exception:
+                pass
+        # Collect per-PV info
+        multipv = info.get("multipv", 1)
+        pv = info.get("pv", [])
+        score = info.get("score")
+        depth = info.get("depth", 0)
+        if pv:
+            try:
+                pv_moves = [m.uci() for m in pv]
+            except Exception:
+                pv_moves = []
+            try:
+                cp = score.white().score(mate_score=100000) if score else None
+            except Exception:
+                cp = None
+            entry = {"multipv": multipv, "depth": depth, "score_cp": cp,
+                     "pv": pv_moves}
+            # Replace existing entry for this multipv index
+            self._last_pvs = [e for e in self._last_pvs if e.get("multipv") != multipv]
+            self._last_pvs.append(entry)
+            self._last_pvs.sort(key=lambda e: e.get("multipv", 0))
+            merged["pvs"] = list(self._last_pvs)
         self.analysis_update.emit(merged)
 
     def _on_sf_finished(self) -> None:
