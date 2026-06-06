@@ -1,4 +1,4 @@
-/* Service worker for Chess Coach v3.0.0 — offline-first PWA.
+/* Service worker for Chess Coach v3.0.0 - offline-first PWA.
  * Caches static assets; falls back to network for API.
  */
 const CACHE_NAME = 'chess-coach-v3.0.0';

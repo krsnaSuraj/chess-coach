@@ -1,6 +1,6 @@
 <div align="center">
 
-# ♟️ Chess Coach v3.0 — "The Humanizer"
+# ♟️ Chess Coach v3.0 - "The Humanizer"
 
 **Anti-detection real-time chess sidekick · Stockfish 18 + optional Maia-1/Lc0**
 
@@ -9,7 +9,7 @@
 [![FastAPI](https://img.shields.io/badge/Web-FastAPI-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
 [![Stockfish](https://img.shields.io/badge/Engine-Stockfish_18-FF6600?logo=chess&logoColor=white)](https://stockfishchess.org)
 [![License](https://img.shields.io/badge/license-MIT-808080)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-199_passing-3fb950)](#-testing)
+[![Tests](https://img.shields.io/badge/tests-630_passing-3fb950)](#-testing)
 
 [Features](#-features) · [Quick Start](#-quick-start) · [Usage](#-usage) · [Configuration](#%EF%B8%8F-configuration) · [Architecture](#-architecture) · [Tech Stack](#-tech-stack)
 
@@ -21,13 +21,13 @@
 
 Chess Coach is a professional real-time chess analysis sidekick that integrates **Stockfish 18** (and optionally **Maia-1** for human-policy priors) into a dual-interface application. v3.0 adds a **6-layer anti-detection architecture** so you can play chess.com without re-banning: multi-engine analysis, CAPS V2 classification, 5 style personalities, motif detection, opponent ELO modelling, and a chess.com-style risk score.
 
-It evaluates positions exclusively during **your turn**, detects blunders and missed opportunities, suggests best moves with visual arrows, presents principal variation lines, and identifies openings via a **509-entry ECO database** — while staying completely silent when you manually enter opponent moves.
+It evaluates positions exclusively during **your turn**, detects blunders and missed opportunities, suggests best moves with visual arrows, presents principal variation lines, and identifies openings via a **509-entry ECO database** - while staying completely silent when you manually enter opponent moves.
 
 ### v3.0 "The Humanizer" Highlights
 
 * **Multi-engine**: Stockfish 18 (depth-based) + Maia-1 (neural policy) running in parallel
 * **CAPS V2**: 8-tier move classification (Brilliant / Great / Best / Excellent / Good / Inaccuracy / Mistake / Blunder)
-* **5 personalities**: Aggressive, Positional, Tactical, Defensive, Balanced — each with its own move-bias dict and ECO preferences
+* **5 personalities**: Aggressive, Positional, Tactical, Defensive, Balanced - each with its own move-bias dict and ECO preferences
 * **Anti-cheat risk score**: 0-100 with 7 chess.com-style signals (top-1 match, CPL, time variance, style, tactical, blunder freq, phase variance)
 * **Bayesian opponent modeler**: estimates opponent ELO and style from observed moves
 * **Motif detector**: pin, fork, skewer, discovered attack, deflection, decoy, back-rank, zwischenzug
@@ -41,7 +41,7 @@ It evaluates positions exclusively during **your turn**, detects blunders and mi
 | Interface | Use Case |
 |-----------|----------|
 | **Desktop GUI** (PyQt6) | Full-featured analysis with premium UI, glass sidebar, animated eval bar, piece slide animation, coach dashboard, move history |
-| **Web Interface** (FastAPI) | Lightweight browser access — play on PC, analyze on phone (same LAN) with 7 REST endpoints |
+| **Web Interface** (FastAPI) | Lightweight browser access - play on PC, analyze on phone (same LAN) with 7 REST endpoints |
 
 ---
 
@@ -51,11 +51,11 @@ It evaluates positions exclusively during **your turn**, detects blunders and mi
   <tr>
     <td>
       <h4>🧑‍🤝‍🧑 Single-Side Sidekick</h4>
-      Select your side (White/Black). Coach analyzes only your moves. You manually enter opponent moves — coach stays silent during opponent's turn.
+      Select your side (White/Black). Coach analyzes only your moves. You manually enter opponent moves - coach stays silent during opponent's turn.
     </td>
     <td>
       <h4>🎯 ECO Opening Detection</h4>
-      <strong>500 entries</strong> across A00–E99. Detects 50+ named openings (Ruy Lopez, Sicilian Najdorf, French, Grünfeld, Benoni, Catalan, etc.) with longest-prefix matching.
+      <strong>500 entries</strong> across A00-E99. Detects 50+ named openings (Ruy Lopez, Sicilian Najdorf, French, Grünfeld, Benoni, Catalan, etc.) with longest-prefix matching.
     </td>
   </tr>
   <tr>
@@ -81,21 +81,21 @@ It evaluates positions exclusively during **your turn**, detects blunders and mi
   <tr>
     <td>
       <h4>🔄 Undo / Redo</h4>
-      Full move-history navigation with Ctrl+Z / Ctrl+Y. Works even after checkmate — undo to continue.
+      Full move-history navigation with Ctrl+Z / Ctrl+Y. Works even after checkmate - undo to continue.
     </td>
     <td>
       <h4>♟️ Underpromotion</h4>
-      When a pawn reaches the 8th rank, a dialog lets you choose Queen, Rook, Bishop, or Knight — no auto-promotion.
+      When a pawn reaches the 8th rank, a dialog lets you choose Queen, Rook, Bishop, or Knight - no auto-promotion.
     </td>
   </tr>
   <tr>
     <td>
       <h4>🔊 Move Sounds</h4>
-      Subtle WAV click on each move via QSoundEffect. Auto-generated at first run — zero external assets needed.
+      Subtle WAV click on each move via QSoundEffect. Auto-generated at first run - zero external assets needed.
     </td>
     <td>
       <h4>🌐 LAN Multi-device</h4>
-      Web server auto-detects your LAN IP — analyze on your phone while Stockfish runs on your PC.
+      Web server auto-detects your LAN IP - analyze on your phone while Stockfish runs on your PC.
     </td>
   </tr>
   <tr>
@@ -115,7 +115,7 @@ It evaluates positions exclusively during **your turn**, detects blunders and mi
     </td>
     <td>
       <h4>🔍 Analysis Board Mode</h4>
-      Paste any FEN position for deep Stockfish analysis — ideal for post-game review or studying specific positions.
+      Paste any FEN position for deep Stockfish analysis - ideal for post-game review or studying specific positions.
     </td>
   </tr>
 </table>
@@ -125,8 +125,8 @@ It evaluates positions exclusively during **your turn**, detects blunders and mi
 ## 📸 Screenshots
 
 <p align="center">
-  <img src="screenshots/Side-by-side.png" width="420" alt="Desktop GUI — Coach Dashboard with glass sidebar, eval bar, piece animation"/>
-  <img src="screenshots/Server.png" width="420" alt="Web Interface — browser-based chess analysis"/>
+  <img src="screenshots/Side-by-side.png" width="420" alt="Desktop GUI - Coach Dashboard with glass sidebar, eval bar, piece animation"/>
+  <img src="screenshots/Server.png" width="420" alt="Web Interface - browser-based chess analysis"/>
 </p>
 
 ---
@@ -136,7 +136,7 @@ It evaluates positions exclusively during **your turn**, detects blunders and mi
 ### Prerequisites
 
 - **Python 3.10+**
-- **Stockfish 18** — download from [stockfishchess.org](https://stockfishchess.org/download/)
+- **Stockfish 18** - download from [stockfishchess.org](https://stockfishchess.org/download/)
 
 ### Setup (All Platforms)
 
@@ -165,10 +165,10 @@ python -m chess_coach web 8080    # custom port
 ### Desktop GUI Workflow
 
 1. Run `python -m chess_coach`
-2. Select your color — **White** or **Black** (your side in the online game)
+2. Select your color - **White** or **Black** (your side in the online game)
 3. Play your move → coach analyzes and displays best move + opening + feedback
 4. Opponent moves online → **drag their pieces on the app to record the move**
-5. Coach shows "Waiting — *Color*'s turn" during opponent's turn (no analysis)
+5. Coach shows "Waiting - *Color*'s turn" during opponent's turn (no analysis)
 6. Repeat until game ends
 7. Use **Undo** / **Redo** buttons or `Ctrl+Z` / `Ctrl+Y` to navigate history
 8. **New Game** restarts with a fresh color choice
@@ -209,7 +209,7 @@ Play move (e.g., 1.e4)                                   → [Coach analyzes]
                                                           → "[C42] Petrov Defense"
                                                           
 Opponent plays (e.g., ...c5)                             [You drag c7→c5]
-                                                          [Coach says "Waiting — Black's turn"]
+                                                          [Coach says "Waiting - Black's turn"]
                                                           (No analysis during opponent's turn)
                                                           
 Play move (e.g., 2.Nf3)                                  → [Coach analyzes]
@@ -242,7 +242,7 @@ display:
   arrow_opacity: 0.6
 ```
 
-**Note:** `arrow_opacity` must be a number (0.0–1.0). Boolean values are rejected.
+**Note:** `arrow_opacity` must be a number (0.0-1.0). Boolean values are rejected.
 
 ---
 
@@ -302,7 +302,7 @@ chess-coach/
 │   ├── main_window.py            # Wires board + dashboard + engine + menus + sounds
 │   ├── server.py                 # FastAPI web server, 7 REST endpoints, CORS
 │   ├── eco_handler.py            # ECO opening detection (longest-prefix match)
-│   ├── eco_data.py               # 509-entry ECO database (A00–E99, all covered)
+│   ├── eco_data.py               # 509-entry ECO database (A00-E99, all covered)
 │   ├── sound_manager.py          # WAV generation + QSoundEffect playback
 │   ├── pgn_handler.py            # PGN export/import utilities
 │   ├── elo_calibrator.py         # Bayesian ELO estimator + 10 think profiles
@@ -318,7 +318,7 @@ chess-coach/
 ├── scripts/
 │   └── install_deps.py           # One-shot auto-installer for SF+Lc0+Maia
 │
-├── tests/                        # 199 tests with pytest
+├── tests/                        # 630 tests across 30 files with pytest
 │   ├── conftest.py
 │   ├── test_config.py            # Config loading, type validation, error handling
 │   ├── test_game_controller.py   # Board state, undo/redo, phases, transitions
@@ -366,14 +366,27 @@ chess-coach/
 | **Sound** | PyQt6.QtMultimedia (QSoundEffect) | Move click sound (auto-generated WAV) |
 | **AI/Detection** | ECO database (500 entries) | Opening name recognition via longest-prefix match |
 | **Configuration** | PyYAML | `config.yaml` parsing with type validation |
-| **Testing** | pytest | 199 tests, 14 test files |
+| **Testing** | pytest | 630 tests across 30 test files |
+
+### SOTA Engines (v3.0+)
+
+| Layer | Technology | Role |
+|-------|-----------|------|
+| **Multi-Engine Pool** | Stockfish 18 + Lc0 v0.32.2 + Maia-2 (optional) | Parallel engine aggregation with weight-based blending and auto-disable on failure |
+| **Syzygy Tablebase** | python-chess + Lichess API fallback | 7-piece endgame perfect play lookup (offline + online) |
+| **CAPS v2** | Engine-corrected SOTA classifier | 11 move categories (Brilliant, Great, Best, Excellent, Good, Inaccuracy, Mistake, Missed, Blunder, Book, Forced) with phase-aware grading |
+| **WebSocket Live** | FastAPI WebSocket + asyncio | Real-time eval stream to web UI with auto-reconnect and broadcast |
+| **Lichess API** | Opening Explorer + Puzzles + OAuth PKCE + Study Sync | 19 puzzle themes, 3 Explorer sources (Masters / Lichess / Player), PKCE-secured OAuth, NDJSON game streaming |
+| **Variants** | python-chess + custom engines | Standard, Chess960, Atomic, Antichess, Horde, KOTH, Three-Check, Crazyhouse |
+| **i18n** | stdlib only | 5 languages (EN, HI, ES, FR, DE) with fallback chain |
+| **a11y** | stdlib only | 18 keyboard shortcuts, ARIA live region announcer, AAA high-contrast theme |
 
 ---
 
 ## 🧪 Testing
 
 ```bash
-pytest                  # Run all 199 tests
+pytest                  # Run all 630 tests
 pytest -v               # Verbose output
 pytest --cov=chess_coach # Coverage report
 ```

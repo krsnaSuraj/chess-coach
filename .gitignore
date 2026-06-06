@@ -55,3 +55,107 @@ lc0/weights/*.pb.gz
 lc0/weights/*.pb
 lc0/networks/
 
+# v3.0 SOTA — additional engines (downloaded, not source)
+# Anchored to repo root so src/chess_coach/engines/ (Python source) is NOT excluded.
+/engines/
+/engines/*.exe
+/engines/berserk/
+/engines/caissa/
+/engines/crystal/
+/engines/patricia/
+/engines/viridithas/
+/engines/shashchess/
+/engines/koivisto/
+/engines/rubichess/
+
+# v3.0 SOTA — Syzygy tablebases (1GB+ for 5-piece, 1.2TB for 7-piece)
+/syzygy/
+/syzygy/*.rtbz
+/syzygy/*.rtbw
+/tablebases/
+
+# v3.0 SOTA — Maia-2 model weights (~150MB)
+/maia2/
+/maia2/*.pt
+/maia2/*.pth
+
+# v3.0 SOTA — Stockfish NNUE network files
+/nnue/
+/nnue/*.nnue
+/stockfish_nnue.pkl
+
+# v3.0 SOTA — Lichess cache, PGN DB, OAuth tokens (root-level only)
+/.chess_coach/
+/.cache/
+/lichess_cache.db
+/pgn_db.sqlite
+/pgn_db.sqlite-*
+/oauth_token.json
+/oauth_state.json
+
+# Coverage artifacts
+.coverage
+.coverage.*
+coverage.xml
+.coverage.json
+htmlcov/
+coverage_html/
+
+# OS / editor
+Thumbs.db
+.DS_Store
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# Python build / install
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+*.egg
+.eggs/
+pip-wheel-metadata/
+develop-eggs/
+.installed.cfg
+MANIFEST
+
+# Virtual env
+.venv/
+venv/
+env/
+.python-version
+
+# Test
+.pytest_cache/
+.tox/
+.nox/
+.cache/
+.mypy_cache/
+.ruff_cache/
+.pyright_cache/
+.scrapy/
+playwright-report/
+test-results/
+playwright/.cache/
+
+# Env files
+.env
+.env.local
+.env.*.local
+
+# Logs / runtime
+*.log
+logs/
+*.pid
+*.sock
+
+# Editor / scratch
+scratch/
+.tmp/
+
+

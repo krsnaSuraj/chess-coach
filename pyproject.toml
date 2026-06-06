@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "chess-coach"
 version = "3.0.0"
-description = "v3.0 'The Humanizer' — anti-detection chess sidekick with Stockfish 18 + Maia 1 (optional)"
+description = "v3.0 'The Humanizer' - anti-detection chess sidekick with Stockfish 18 + Maia 1 (optional)"
 requires-python = ">=3.10"
 dependencies = [
     "PyQt6",
@@ -24,6 +24,22 @@ chess-coach = "chess_coach.__main__:main"
 test = [
     "pytest>=7",
     "pytest-cov>=4",
+]
+sota = [
+    "httpx>=0.24",
+    "websockets>=11",
+]
+maia2 = [
+    "torch>=2.0",
+    "transformers>=4.40",
+]
+dev = [
+    "pytest>=7",
+    "pytest-cov>=4",
+    "black>=23",
+    "ruff>=0.1",
+    "mypy>=1.4",
+    "pre-commit>=3",
 ]
 
 [tool.setuptools.packages.find]

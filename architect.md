@@ -1,4 +1,4 @@
-# Chess Coach v3.0.0 — Architect's Reference
+# Chess Coach v3.0.0 - Architect's Reference
 
 > **Single source of truth.** All architecture, decisions, and diagrams live here.
 > Read this once to understand the whole system. v3.0.0 SOTA release.
@@ -13,9 +13,9 @@ coach** (blunder explanation, plan extraction, pattern detection, accuracy), **8
 themes**, **80 sounds**, **3D widgets**, **premove**, and a **web SOTA UI**.
 
 Three surfaces share one Python core:
-- **Desktop** (PySide6 / Qt) — 7 custom widgets, real-time coach panel
-- **Web** (FastAPI + vanilla JS) — PWA, 8 themes, no jQuery, no chessboard.js
-- **CLI** — Stockfish UCI, CAPS, puzzles, engine match
+- **Desktop** (PySide6 / Qt) - 7 custom widgets, real-time coach panel
+- **Web** (FastAPI + vanilla JS) - PWA, 8 themes, no jQuery, no chessboard.js
+- **CLI** - Stockfish UCI, CAPS, puzzles, engine match
 
 ---
 
@@ -154,7 +154,7 @@ graph TB
 
 ---
 
-## 4. Data Flow — One Move, End to End (ASCII)
+## 4. Data Flow - One Move, End to End (ASCII)
 
 ```
 USER DRAGS PIECE ON BOARD
@@ -218,7 +218,7 @@ USER DRAGS PIECE ON BOARD
 
 ---
 
-## 5. State Machine — Game Lifecycle (ASCII)
+## 5. State Machine - Game Lifecycle (ASCII)
 
 ```
   +-----------+
@@ -323,7 +323,7 @@ analyzing   drone     drone  drone   drone   drone   drone    drone  drone
 brilliant   bright    bright bright  bright  bright  bright   bright bright
 
 Each sound = 0.05-0.30s generated WAV (no external assets, no API)
-Music: 3 ambient tracks (menu, analysis, game) — 30s seamless loop
+Music: 3 ambient tracks (menu, analysis, game) - 30s seamless loop
 Spatial pan: StereoPannerNode (web) / stereo WAV (desktop), file 0=a, 7=h
 ```
 
@@ -507,7 +507,7 @@ All tables have a `pharmacyId` tenant key for multi-pharmacy isolation.
 
 ---
 
-## 13. Engine Match — 5 Personalities
+## 13. Engine Match - 5 Personalities
 
 ```
 +---------------+---------+--------------------------------------+
@@ -621,12 +621,12 @@ chess/
 | **80 sounds (10x8)** | Each theme needs its own sonic identity; no shared audio file |
 | **Generated SFX not bundled** | Pure stdlib (wave/struct/math), 0 deps, infinite variation |
 | **Premove yes** | Lichess/chess.com standard; expected by users |
-| **4 arrow kinds** | best/plan/threat/user — covers common teaching use cases |
+| **4 arrow kinds** | best/plan/threat/user - covers common teaching use cases |
 | **Right-click freehand** | Common chess.com gesture; advanced users love it |
-| **5 personalities** | Aggressive/defensive/positional/tactical/wild — distinct strategies |
+| **5 personalities** | Aggressive/defensive/positional/tactical/wild - distinct strategies |
 | **ELO slider 800-2800** | Beginner (~800) to engine-level (~2800) coverage |
 | **61 puzzles (not 500)** | Hand-picked quality > scraped quantity; offline-first |
-| **Pattern detector 5 motifs** | Fork/pin/skewer/hanging/back-rank — most common |
+| **Pattern detector 5 motifs** | Fork/pin/skewer/hanging/back-rank - most common |
 | **Blunder explainer 8 cats** | Hanging/missed_tactic/time/king/positional/opening/endgame/placement |
 | **CPL scale 0-1000** | Matches Lichess centipawn thresholds (200=blunder) |
 | **Sigmoid cp-to-winrate** | 400cp = 10x winrate, standard Elo formula |
@@ -637,7 +637,7 @@ chess/
 | **Auto Hash 25% RAM** | Modern SF18 likes 1-4GB; cap at 25% for multi-app users |
 | **No Syzygy 7p by default** | 1.2GB tablebase is too heavy for opt-in default |
 | **Single architect.md** | 6 stale .md files were contradictory; one is the truth |
-| **459 tests in 6s** | All offline, headless, no I/O — fast feedback loop |
+| **459 tests in 6s** | All offline, headless, no I/O - fast feedback loop |
 
 ---
 
@@ -681,15 +681,68 @@ this is Python: `psutil`, `pyyaml`, `chess`, `fastapi`, `uvicorn`, `PySide6`,
 
 ---
 
-## 19. License & Credits
+## 20. SOTA Modules (v3.0+ extension)
 
-MIT License. Built on:
-- [python-chess](https://python-chess.readthedocs.io/) — game logic
-- [Stockfish](https://stockfishchess.org/) — engine
-- [PySide6](https://wiki.qt.io/Qt_for_Python) — desktop UI
-- [FastAPI](https://fastapi.tiangolo.com/) — web framework
-- [Lc0](https://lczero.org/) + [Maia](https://maiachess.com/) — optional NN engines
+### `engines/` - Multi-Engine Abstraction Layer
+- `base.py`: `Engine` ABC, `EngineInfo`, `Evaluation` (with `winrate` property), `EngineError`.
+- `stockfish.py`: `Stockfish18Engine` with `SF18_NNUE_NAME` and `SF18_DEFAULT_OPTIONS`, `find_stockfish()` helper.
+- `lc0.py`: `Lc0Engine` with `Lc0Engine` UCI options (WeightsFile, Backend, etc.).
+- `maia2.py`: `Maia2Engine` with ELO clamping (1000-2400), heuristic prior fallback (no torch dep required), `deterministic_maia_choice` helper.
+- `multi_engine_pool.py`: `MultiEnginePool` with `EngineWeight`, parallel `ThreadPoolExecutor`, weighted aggregation, `make_default_pool()` factory. Broken engines auto-disable on failure.
+
+### `tablebase/` - Syzygy Endgame Perfect Play
+- `syzygy.py`: `SyzygyProbe` with local file probe + Lichess API fallback, WDL codes matching python-chess, `empty_tablebase_result` helper.
+
+### `classify/` - CAPS v2 Move Classification
+- `epd.py`: `cp_to_winrate` with explicit saturation (`cp >= 1000` -> 1.0, `cp <= -1000` -> 0.0), `winrate_to_epd`, `EPD_THRESHOLDS`.
+- `phase_detector.py`: `GamePhase` enum (OPENING, EARLY_MIDDLEGAME, MIDDLEGAME, LATE_MIDDLEGAME, ENDGAME), `detect_phase`, `phase_buckets`.
+- `brilliant.py`: `is_brilliant` with material delta and undefended-square detection (`_is_undefended_target`).
+- `miss.py`: `is_miss` with swing threshold 200cp.
+- `great.py`: `is_great_move`, `is_only_good_move`.
+- `classify_v2.py`: `MoveClass` enum (11 categories), `classify_move`, `classify_game`, `ClassificationReport`.
+- `report_card.py`: `PhaseGrade`, `ReportCard`, `build_report_card`, `_letter_grade`.
+
+### `ws/` - WebSocket Live Channel
+- `protocol.py`: `WsMessage`, `EvalLine`, `AnalysisUpdate`, `GameState`, `ToastMessage`, `SoundEvent`, `MessageType` enum.
+- `server.py`: `WsBroadcaster` with `register` / `unregister` / `broadcast`, `attach_websocket` FastAPI helper.
+- `client.py`: `WsClient` with auto-reconnect + exponential backoff, `MockWsClient` for tests.
+
+### `lichess/` - Lichess API Clients
+- `explorer.py`: `LichessExplorer` with 3 sources (Masters / Lichess / Player), `MoveStats`, `ExplorerResponse`.
+- `cache.py`: `LichessCache` SQLite TTL with timeout, `default_cache_path`, `cached` decorator.
+- `puzzles.py`: `PuzzleTheme` enum (19 themes), `Puzzle`, `LichessPuzzles` client, `curated_puzzles`.
+- `oauth.py`: `LichessOAuth` with PKCE flow, `OAuthToken`, `_generate_pkce`.
+- `study_sync.py`: `StudySync`, `Study`, `_split_pgn_chapters`.
+- `game_sync.py`: `GameSync` NDJSON stream, `GameSummary`.
+
+### `variants/` - 8 Chess Variants
+- `standard.py`, `chess960.py` (with `random_starting_position` and `_is_legal_960`), `atomic.py`, `antichess.py`, `horde.py`, `king_of_the_hill.py`, `three_check.py`, `crazyhouse.py`.
+- `registry.py`: 8 `VariantInfo` entries, `get_variant`, `variant_names`.
+
+### `i18n/` - Internationalization (5 Languages)
+- `en.py`, `hi.py`, `es.py`, `fr.py`, `de.py` (EN, HI, ES, FR, DE).
+- `loader.py`: `I18n` class, `get_string`, `available_languages`, `language_name`.
+
+### `a11y/` - Accessibility
+- `keyboard_nav.py`: `KeyboardHandler`, `KEY_HELP` (18 shortcuts), `normalize_combo` (deduped, sorted mods).
+- `screen_reader.py`: `ScreenReaderAnnouncer`, `LiveRegion`, `Announcement`.
+- `high_contrast.py`: `HighContrastTheme`, `HIGH_CONTRAST_COLORS` (AAA contrast), `is_high_contrast_active`.
+
+### Test Coverage
+- 171 new SOTA tests across 6 new files (`test_engines.py`, `test_tablebase.py`, `test_classify_v2.py`, `test_ws.py`, `test_lichess.py`, `test_variants_i18n_a11y.py`).
+- Total: **630 tests passing in ~12s** (was 459 in v2.5).
 
 ---
 
-**v3.0.0 SOTA — One file. One truth. Zero stale docs.**
+## 19. License & Credits
+
+MIT License. Built on:
+- [python-chess](https://python-chess.readthedocs.io/) - game logic
+- [Stockfish](https://stockfishchess.org/) - engine
+- [PySide6](https://wiki.qt.io/Qt_for_Python) - desktop UI
+- [FastAPI](https://fastapi.tiangolo.com/) - web framework
+- [Lc0](https://lczero.org/) + [Maia](https://maiachess.com/) - optional NN engines
+
+---
+
+**v3.0.0 SOTA - One file. One truth. Zero stale docs.**
