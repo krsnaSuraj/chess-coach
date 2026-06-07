@@ -1,7 +1,0 @@
-PyQt6
-python-chess>=1.999
-pyyaml
-fastapi
-uvicorn
-pydantic
-requests>=2.28
