@@ -145,10 +145,10 @@ def get_coach_critical_moments(min_swing: float = 100.0) -> dict:
             "fen": temp.fen(),
             "prev_eval_cp": prev_eval,
             "side_just_moved": temp.turn,
+            "eval_cp": 0,
+            "move_played": temp.san(mv),
         })
         temp.push(mv)
-        positions[-1]["eval_cp"] = 0
-        positions[-1]["move_played"] = temp.san(mv)
     moments = find_critical_moments(positions, min_swing_cp=min_swing)
     summary = summarize_critical_moments(moments)
     return {
@@ -538,7 +538,7 @@ def _build_response() -> UnifiedResponse:
         cached = game_controller.cached_coach if cache_hit else None
 
     coach_data = cached
-    if is_human_turn and not cache_hit:
+    if not cache_hit:
         coach_data = _run_coach_analysis_safe()
         with game_controller.lock:
             game_controller.cached_coach = coach_data
@@ -598,13 +598,55 @@ class _NoCacheStaticFiles(StaticFiles):
         return resp
 
 
+# --- Frontend serving -------------------------------------------------------
+# Prefer the SvelteKit production build (apps/web/build).  Fall back to the
+# legacy `static/` vanilla-JS frontend only if no SvelteKit build is present.
 HERE = os.path.dirname(os.path.abspath(__file__))
-STATIC_DIR = os.path.join(HERE, "..", "..", "static")
-if os.path.exists(STATIC_DIR):
-    app.mount("/static", _NoCacheStaticFiles(directory=STATIC_DIR), name="static")
+SVELTEKIT_BUILD = os.path.normpath(os.path.join(HERE, "..", "..", "apps", "web", "build"))
+LEGACY_STATIC = os.path.normpath(os.path.join(HERE, "..", "..", "static"))
+
+if os.path.isfile(os.path.join(SVELTEKIT_BUILD, "index.html")):
+    FRONTEND_DIR = SVELTEKIT_BUILD
+    logger.info("Serving SvelteKit build from %s", FRONTEND_DIR)
+elif os.path.isdir(LEGACY_STATIC):
+    FRONTEND_DIR = LEGACY_STATIC
+    logger.warning(
+        "SvelteKit build not found at %s; serving legacy static from %s",
+        SVELTEKIT_BUILD,
+        LEGACY_STATIC,
+    )
+else:
+    FRONTEND_DIR = None
+    logger.error(
+        "No frontend found (checked %s and %s) — web UI will not be served",
+        SVELTEKIT_BUILD,
+        LEGACY_STATIC,
+    )
+
+if FRONTEND_DIR is not None:
+    # SvelteKit's immutable chunks live in `_app/immutable/...`
+    _app_dir = os.path.join(FRONTEND_DIR, "_app")
+    if os.path.isdir(_app_dir):
+        app.mount("/_app", _NoCacheStaticFiles(directory=_app_dir), name="svelte-app")
+
+    # Root-level static assets (favicon, manifest, etc.) served under /static
+    app.mount("/static", _NoCacheStaticFiles(directory=FRONTEND_DIR), name="frontend-root")
 
     @app.get("/", include_in_schema=False)
     async def index() -> FileResponse:
-        return FileResponse(os.path.join(STATIC_DIR, "index.html"))
+        return FileResponse(os.path.join(FRONTEND_DIR, "index.html"))
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def spa_fallback(full_path: str) -> FileResponse:
+        # Never shadow API, WS, or already-mounted asset prefixes
+        if full_path.startswith(("api/", "ws", "ws/", "_app/", "static/", "docs/")):
+            from fastapi import HTTPException
+            raise HTTPException(404)
+        # Concrete file inside the frontend dir?  Serve it directly.
+        candidate = os.path.join(FRONTEND_DIR, full_path)
+        if os.path.isfile(candidate):
+            return FileResponse(candidate)
+        # SPA fallback: every other path returns the app shell.
+        return FileResponse(os.path.join(FRONTEND_DIR, "index.html"))
 else:
-    logger.warning("Static directory not found at %s — web UI will not be served", STATIC_DIR)
+    logger.warning("No frontend configured — web UI will not be served")

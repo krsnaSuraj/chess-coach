@@ -4,14 +4,10 @@ import type { HistoryEntry } from '../lib/types';
 
 function entry(ply: number, san: string, uci: string, cls: HistoryEntry['classification']): HistoryEntry {
   return {
-    ply,
-    san,
-    uci,
-    fen_before: 'a',
-    fen_after: 'b',
-    eval_cp: null,
-    classification: cls,
-    cpl: null
+    ply, san, uci,
+    fen_before: 'a', fen_after: 'b',
+    eval_cp: null, classification: cls, cpl: null,
+    played_by: 'human'
   };
 }
 
@@ -56,21 +52,7 @@ describe('GameStore', () => {
 
   it('displayedFen reflects cursor (historical)', () => {
     const g = new GameStore();
-    g.state = {
-      fen: 'live-fen',
-      turn: 'white',
-      is_check: false,
-      is_checkmate: false,
-      is_stalemate: false,
-      is_game_over: false,
-      move_history: ['e4', 'c5'],
-      legal_moves: [],
-      ply: 2,
-      result: null,
-      opening: null,
-      classification: ['GOOD', 'GOOD'],
-      accuracy: null
-    };
+    g.state = { ok: true, mode: 'coach', fen: 'live-fen', move: null, coach: null, error: null };
     g.history = [
       entry(1, 'e4', 'e2e4', 'GOOD'),
       entry(2, 'c5', 'c7c5', 'GOOD')
@@ -92,5 +74,14 @@ describe('GameStore', () => {
     g.history = [entry(1, 'e4', 'e2e4', 'EXCELLENT')];
     expect(g.classificationAt(0)).toBe('EXCELLENT');
     expect(g.classificationAt(5)).toBe('GOOD');
+  });
+
+  it('latestEvalCp parses coach eval string', () => {
+    const g = new GameStore();
+    g.state = {
+      ok: true, mode: 'coach', fen: '', move: null, error: null,
+      coach: { best_move: 'e2e4', eval: '+1.50', pv: '', thinking: [] }
+    };
+    expect(g.latestEvalCp).toBe(150);
   });
 });

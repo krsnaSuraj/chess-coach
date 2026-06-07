@@ -3,16 +3,17 @@
    * Main page — wires all 10 SOTA features end-to-end.
    * - Board (chessground) + drag-drop + arrow overlay
    * - EvalBar with 200ms tween
-   * - WebSocket live eval streaming
-   * - MoveList with arrow-key navigation (Left/Right/Home/End)
+   * - WebSocket live eval streaming (analysis_update envelopes)
+   * - MoveList with arrow-key navigation
    * - MovePills with 11-class classification
    * - AccuracyGraph (Canvas)
-   * - OpeningExplorer (Lichess DB)
+   * - OpeningExplorer (lightweight, no Lichess DB)
    * - ThemeSwitcher (10 themes)
    * - PromotionDialog
    * - EngineSelector (7 engines)
    */
   import { onMount, onDestroy } from 'svelte';
+  import { Chess } from 'chess.js';
   import Board from '$lib/components/Board.svelte';
   import EvalBar from '$lib/components/EvalBar.svelte';
   import MoveList from '$lib/components/MoveList.svelte';
@@ -25,7 +26,7 @@
   import { EvalStore } from '$lib/stores/eval.svelte';
   import { WsConnection } from '$lib/stores/ws.svelte';
   import { SettingsStore } from '$lib/stores/settings.svelte';
-  import type { WsEvalMessage } from '$lib/types';
+  import type { WsAnalysisUpdate, WsEnvelope } from '$lib/types';
 
   const game = new GameStore();
   const evalStore = new EvalStore();
@@ -41,7 +42,8 @@
     await settings.load();
     settings.applyTheme();
     await game.refresh();
-    if (game.cursor < 0 && game.history.length > 0) game.cursor = game.history.length - 1;
+    evalStore.reset();
+    evalStore.fromCoach(game.state?.coach ?? null, 0, 'BOOK');
     ws.start('/ws');
     evalStore.start();
   });
@@ -51,16 +53,16 @@
     evalStore.stop();
   });
 
-  // Subscribe to WS messages — update eval store + sound cues
+  // Subscribe to WS messages — feed EvalStore
   $effect(() => {
-    const off = ws.onMessage((msg: WsEvalMessage) => {
-      if (msg.type === 'eval') {
-        const ply = game.state?.ply ?? 0;
-        evalStore.onWs(msg, ply);
-        if (msg.classification === 'BLUNDER') lastSoundKind = 'capture';
-        else if (msg.classification === 'MISTAKE') lastSoundKind = 'move';
-        else if (msg.classification === 'BRILLIANT') lastSoundKind = 'promote';
-        else if (msg.classification === 'GREAT') lastSoundKind = 'castle';
+    const off = ws.onMessage((msg: WsEnvelope) => {
+      if (msg.type === 'analysis_update') {
+        const upd = msg as WsAnalysisUpdate;
+        evalStore.onWsAnalysisUpdate(upd);
+        if (upd.classification === 'BLUNDER') lastSoundKind = 'capture';
+        else if (upd.classification === 'MISTAKE') lastSoundKind = 'move';
+        else if (upd.classification === 'BRILLIANT') lastSoundKind = 'promote';
+        else if (upd.classification === 'GREAT') lastSoundKind = 'castle';
         else lastSoundKind = 'move';
       }
     });
@@ -75,80 +77,89 @@
     return game.history[game.cursor]?.uci ?? null;
   });
   let bestUci = $derived(evalStore.bestUci);
-  let altUci = $derived(evalStore.multipv[1]?.pv?.[0] ? evalStore.multipv[1]!.pv[0] + (evalStore.multipv[1]!.pv[1] ?? '') : null);
+  let altUci = $derived(evalStore.multipv[1]?.pv?.[0] ? (evalStore.multipv[1]!.pv[0] + (evalStore.multipv[1]!.pv[1] ?? '')) : null);
 
   // Board callbacks
-  function handleMove(uci: string) {
-    if (promotionFromTo) return; // ignore if dialog open
-    game.playMove(uci);
-    lastSoundKind = 'move';
-    game.cursor = -1; // go to live
+  async function handleMove(uci: string) {
+    if (promotionFromTo) return;
+    const beforeFen = game.state?.fen ?? '';
+    const ok = await game.playMove(uci);
+    if (!ok) { lastSoundKind = 'move'; return; }
+    evalStore.fromCoach(game.state?.coach ?? null, game.history.length, game.latestClassification);
+    // Detect capture/check from the move SAN
+    try {
+      const last = game.history[game.history.length - 1];
+      if (last?.san.includes('x')) lastSoundKind = 'capture';
+      else if (last?.san.includes('+') || last?.san.includes('#')) lastSoundKind = 'check';
+      else lastSoundKind = 'move';
+    } catch { lastSoundKind = 'move'; }
+    void beforeFen;
+    game.cursor = -1;
   }
+
   function handlePromotionRequest(from: string, to: string) {
     promotionFromTo = { from, to };
   }
-  function handlePromotion(piece: 'q' | 'r' | 'b' | 'n') {
+  async function handlePromotion(piece: 'q' | 'r' | 'b' | 'n') {
     if (!promotionFromTo) return;
     const uci = promotionFromTo.from + promotionFromTo.to + piece;
     promotionFromTo = null;
     lastSoundKind = 'promote';
-    game.playMove(uci);
+    await game.playMove(uci, piece);
+    evalStore.fromCoach(game.state?.coach ?? null, game.history.length, game.latestClassification);
   }
-  function handlePromotionCancel() {
-    promotionFromTo = null;
-  }
+  function handlePromotionCancel() { promotionFromTo = null; }
 
-  function handleNewGame() {
-    game.newGame();
+  async function handleNewGame() {
+    await game.newGame(true);
     evalStore.reset();
+    evalStore.fromCoach(game.state?.coach ?? null, 0, 'BOOK');
   }
-  function handleUndo() {
-    game.undo();
+  async function handleUndo() {
+    await game.undo();
+    evalStore.fromCoach(game.state?.coach ?? null, game.history.length, game.latestClassification);
   }
-  function handleRedo() {
-    game.redo();
+  async function handleRedo() {
+    await game.redo();
+    evalStore.fromCoach(game.state?.coach ?? null, game.history.length, game.latestClassification);
   }
   function handleFlip() {
-    settings.update('showCoordinates', settings.data.showCoordinates); // no-op, but keeps reactivity
-    // orientation is in GameStore; flip there
     game.orientation = game.orientation === 'white' ? 'black' : 'white';
   }
 
+  // Live position summary derived from the FEN (no rich state on backend)
+  let liveSummary = $derived.by(() => {
+    const fen = game.displayedFen;
+    if (!fen) return { kind: 'idle', label: 'No game' };
+    try {
+      const c = new Chess(fen);
+      if (c.isCheckmate()) return { kind: 'mate', label: 'Checkmate' };
+      if (c.isStalemate()) return { kind: 'stale', label: 'Stalemate' };
+      if (c.isCheck()) return { kind: 'check', label: 'Check' };
+      if (c.isGameOver()) return { kind: 'over', label: 'Game over' };
+      return { kind: 'live', label: `${c.turn() === 'w' ? 'White' : 'Black'} to move` };
+    } catch {
+      return { kind: 'err', label: 'Bad FEN' };
+    }
+  });
+
   // -------- Global keyboard shortcuts --------
-  // This is SOTA feature #1: arrow keys navigate game history.
   function onKey(e: KeyboardEvent) {
     const tag = (e.target as HTMLElement | null)?.tagName?.toLowerCase();
     if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
     if (e.ctrlKey || e.metaKey || e.altKey) return;
 
     switch (e.key) {
-      case 'ArrowLeft':
-        e.preventDefault();
-        game.stepBack();
-        break;
-      case 'ArrowRight':
-        e.preventDefault();
-        game.stepForward();
-        break;
-      case 'Home':
-        e.preventDefault();
-        game.goToStart();
-        break;
-      case 'End':
-        e.preventDefault();
-        game.goToEnd();
-        break;
-      case 'f':
-      case 'F':
+      case 'ArrowLeft':  e.preventDefault(); game.stepBack(); break;
+      case 'ArrowRight': e.preventDefault(); game.stepForward(); break;
+      case 'Home':       e.preventDefault(); game.goToStart(); break;
+      case 'End':        e.preventDefault(); game.goToEnd(); break;
+      case 'f': case 'F':
         e.preventDefault();
         game.orientation = game.orientation === 'white' ? 'black' : 'white';
         break;
-      case 'n':
-      case 'N':
-        if (e.shiftKey) {
-          e.preventDefault();
-          handleNewGame();
-        }
+      case 'n': case 'N':
+        if (e.shiftKey) { e.preventDefault(); handleNewGame(); }
         break;
     }
   }
@@ -218,21 +229,25 @@
     <span class="status" data-testid="game-status">
       {#if game.error}
         <span style="color: var(--error)">⚠ {game.error}</span>
-      {:else if game.state?.is_checkmate}
-        ☠ Checkmate — {game.state.result ?? '*'}
-      {:else if game.state?.is_stalemate}
+      {:else if liveSummary.kind === 'mate'}
+        ☠ {liveSummary.label}
+      {:else if liveSummary.kind === 'stale'}
         ½ Draw — stalemate
-      {:else if game.state?.is_check}
-        ✓ Check
+      {:else if liveSummary.kind === 'check'}
+        ✓ {liveSummary.label}
       {:else}
-        ▶ Live
+        ▶ {liveSummary.label}
       {/if}
     </span>
   </footer>
 
   {#if promotionFromTo}
     <PromotionDialog
-      color={game.state?.turn === 'white' ? 'white' : 'black'}
+      color={(() => {
+        try {
+          return new Chess(game.displayedFen).turn() === 'w' ? 'white' : 'black';
+        } catch { return 'white'; }
+      })()}
       onSelect={handlePromotion}
       onCancel={handlePromotionCancel}
     />
@@ -286,9 +301,7 @@
     flex-direction: column;
     min-height: 0;
   }
-  .graph-col, .explorer-col {
-    min-height: 0;
-  }
+  .graph-col, .explorer-col { min-height: 0; }
   .hud {
     display: flex;
     justify-content: space-between;

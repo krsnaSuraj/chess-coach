@@ -1,9 +1,10 @@
 // =============================================================
 //  Settings store — theme, sound, engine, etc.
 //  Persisted to localStorage on every change.
+//  Engine list is hardcoded (no /api/engines endpoint).
 // =============================================================
-import { api } from '$lib/api/client';
-import type { EngineInfo } from '$lib/types';
+import { api, HARDCODED_ENGINES } from '$lib/api/client';
+import type { EngineInfo, HumanizerConfig } from '$lib/types';
 
 const STORAGE_KEY = 'chess_coach_settings_v3';
 
@@ -20,16 +21,8 @@ export type ThemeName =
   | 'high_contrast';
 
 export const THEMES: ThemeName[] = [
-  'midnight',
-  'forest',
-  'sunset',
-  'marble',
-  'lichess',
-  'blue_glass',
-  'cyber_neon',
-  'sepia',
-  'paper',
-  'high_contrast'
+  'midnight', 'forest', 'sunset', 'marble', 'lichess',
+  'blue_glass', 'cyber_neon', 'sepia', 'paper', 'high_contrast'
 ];
 
 export interface PersistedSettings {
@@ -42,7 +35,7 @@ export interface PersistedSettings {
   showEvalBar: boolean;
   showWinProb: boolean;
   showAccuracyGraph: boolean;
-  animationSpeed: number; // 0..1
+  animationSpeed: number;
   engine: string;
   personality: 'aggressive' | 'positional' | 'tactical' | 'defensive' | 'balanced';
   targetElo: number;
@@ -88,7 +81,8 @@ function saveToStorage(s: PersistedSettings) {
 
 export class SettingsStore {
   data = $state<PersistedSettings>(DEFAULTS);
-  engines = $state<EngineInfo[]>([]);
+  engines = $state<EngineInfo[]>(HARDCODED_ENGINES);
+  humanizer = $state<HumanizerConfig | null>(null);
 
   constructor() {
     this.data = loadFromStorage();
@@ -96,18 +90,17 @@ export class SettingsStore {
 
   async load() {
     try {
-      const remote = await api.settings();
-      // localStorage takes priority for user-controlled fields,
-      // but pull in any new engine list from server.
-      this.data = { ...DEFAULTS, ...this.data, ...(remote as Partial<PersistedSettings>) };
+      const cfg = await api.humanizerConfig();
+      this.humanizer = cfg;
+      // Sync our local settings with the server's humanizer target
+      if (typeof cfg.target_elo === 'number') {
+        this.data = { ...this.data, targetElo: cfg.target_elo };
+      }
+      if (typeof cfg.personality === 'string') {
+        this.data = { ...this.data, personality: cfg.personality as PersistedSettings['personality'] };
+      }
     } catch {
       /* offline — keep local */
-    }
-    try {
-      const r = await api.engines();
-      this.engines = r.engines;
-    } catch {
-      this.engines = [];
     }
   }
 
@@ -125,12 +118,12 @@ export class SettingsStore {
     }
   }
 
+  /**
+   * Switch active engine (local-only).
+   * Backend has no per-engine "set" endpoint — the engine choice is
+   * stored locally and the backend serves the configured default.
+   */
   async switchEngine(name: string) {
-    try {
-      await api.switchEngine(name);
-      this.update('engine', name);
-    } catch (e) {
-      console.error('switchEngine failed', e);
-    }
+    this.update('engine', name);
   }
 }

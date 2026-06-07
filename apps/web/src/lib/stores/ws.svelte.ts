@@ -1,20 +1,22 @@
 // =============================================================
 //  WebSocket connection state — Svelte 5 runes
-//  Single source of truth for live eval streaming.
+//  Wires to the real backend WS envelope:
+//    { type, v, ts, ...data }
+//  Heartbeat sends {"type": "ping"} (JSON) per the protocol
+//  (src/chess_coach/ws/server.py + ws/protocol.py).
 // =============================================================
-import type { WsEvalMessage } from '$lib/types';
+import type { WsAnalysisUpdate, WsEnvelope } from '$lib/types';
 
 export type WsState = 'idle' | 'connecting' | 'open' | 'closed' | 'error';
 
 export class WsConnection {
   url = $state('/ws');
   state = $state<WsState>('idle');
-  lastMessage = $state<WsEvalMessage | null>(null);
   retry = $state(0);
   lastError = $state<string | null>(null);
 
   #socket: WebSocket | null = null;
-  #handlers = new Set<(m: WsEvalMessage) => void>();
+  #handlers = new Set<(m: WsEnvelope) => void>();
   #retryTimer: ReturnType<typeof setTimeout> | null = null;
   #pingTimer: ReturnType<typeof setInterval> | null = null;
   #shouldRun = false;
@@ -36,15 +38,9 @@ export class WsConnection {
     this.state = 'idle';
   }
 
-  onMessage(fn: (m: WsEvalMessage) => void) {
+  onMessage(fn: (m: WsEnvelope) => void) {
     this.#handlers.add(fn);
     return () => this.#handlers.delete(fn);
-  }
-
-  send(msg: unknown) {
-    if (this.#socket?.readyState === WebSocket.OPEN) {
-      this.#socket.send(JSON.stringify(msg));
-    }
   }
 
   #connect() {
@@ -59,17 +55,17 @@ export class WsConnection {
         this.state = 'open';
         this.retry = 0;
         this.lastError = null;
-        // Heartbeat — keep connection alive
         if (this.#pingTimer) clearInterval(this.#pingTimer);
         this.#pingTimer = setInterval(() => {
-          if (ws.readyState === WebSocket.OPEN) ws.send('ping');
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'ping', v: 1, ts: Date.now() }));
+          }
         }, 15000);
       };
 
       ws.onmessage = (ev) => {
         try {
-          const data = JSON.parse(ev.data) as WsEvalMessage;
-          this.lastMessage = data;
+          const data = JSON.parse(ev.data) as WsEnvelope;
           for (const h of this.#handlers) h(data);
         } catch (e) {
           this.lastError = String(e);
@@ -86,7 +82,7 @@ export class WsConnection {
         if (this.#pingTimer) clearInterval(this.#pingTimer);
         this.#pingTimer = null;
         if (!this.#shouldRun) return;
-        // Exponential backoff: 1s, 2s, 4s, 8s, max 30s
+        // Exponential backoff: 1s, 2s, 4s, 8s, 16s, max 30s
         const delay = Math.min(30000, 1000 * 2 ** Math.min(this.retry, 5));
         this.retry += 1;
         this.#retryTimer = setTimeout(() => this.#connect(), delay);

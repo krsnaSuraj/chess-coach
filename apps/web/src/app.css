@@ -167,6 +167,10 @@ html, body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* chessground base CSS (required: cg-container/cg-board need position:absolute) */
+@import 'chessground/assets/chessground.base.css';
+@import 'chessground/assets/chessground.brown.css';
+
 /* chessground overrides — board square colors come from data-theme */
 .cg-wrap {
   background: var(--bg-2);

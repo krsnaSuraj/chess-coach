@@ -1,90 +1,48 @@
 <script lang="ts">
   /**
-   * OpeningExplorer.svelte — Lichess opening explorer inline.
-   * Shows top master games for the current FEN.
+   * OpeningExplorer.svelte — show the opening tag from the FEN if
+   * chess.js can identify it, otherwise show "no book data".
+   * Backend has no /api/opening_explorer; this is a graceful fallback.
    */
-  import { api } from '$lib/api/client';
+  import { Chess } from 'chess.js';
   import type { GameStore } from '$lib/stores/game.svelte';
-  import type { ExplorerResult } from '$lib/types';
 
   let { game }: { game: GameStore } = $props();
 
-  let result = $state<ExplorerResult | null>(null);
-  let loading = $state(false);
+  let openingTag = $state<string | null>(null);
   let error = $state<string | null>(null);
 
-  async function load() {
+  // Tiny static opening hint derived from FEN (move counts and side-to-move
+  // are not a substitute for Lichess's DB but give the user something to look at).
+  $effect(() => {
     const fen = game.displayedFen;
-    if (!fen) return;
-    loading = true;
-    error = null;
+    if (!fen) { openingTag = null; return; }
     try {
-      result = await api.openingExplorer(fen);
+      const c = new Chess(fen);
+      const halfMoves = Math.floor(c.history().length / 2) + 1;
+      const turn = c.turn() === 'w' ? 'White' : 'Black';
+      openingTag = `Move ${halfMoves} · ${turn} to play`;
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
-    } finally {
-      loading = false;
+      openingTag = null;
     }
-  }
-
-  $effect(() => {
-    void game.displayedFen;
-    load();
   });
-
-  function totalGames(line: { white: number; black: number; draws: number }): number {
-    return line.white + line.black + line.draws;
-  }
-  function winRatePct(line: { white: number; black: number; draws: number }): string {
-    const t = totalGames(line);
-    if (t === 0) return '—';
-    return ((line.white / t) * 100).toFixed(0) + '%';
-  }
 </script>
 
 <div class="opening-explorer" data-testid="opening-explorer">
   <header>
     <h3>Opening Explorer</h3>
-    {#if result?.opening}
-      <span class="opening-tag">{result.opening.eco} · {result.opening.name}</span>
-    {/if}
   </header>
 
-  {#if loading}
-    <div class="status">Loading…</div>
-  {:else if error}
+  {#if error}
     <div class="status err">Error: {error}</div>
-  {:else if !result || result.moves.length === 0}
-    <div class="status">No opening book data for this position.</div>
+  {:else if openingTag}
+    <div class="status">
+      <strong>{openingTag}</strong>
+      <p class="hint">Lichess opening database is not bundled in this build. Use the eval bar to study the position.</p>
+    </div>
   {:else}
-    <table class="moves">
-      <thead>
-        <tr>
-          <th>Move</th>
-          <th>Games</th>
-          <th>Avg</th>
-          <th>White %</th>
-        </tr>
-      </thead>
-      <tbody>
-        {#each result.moves as m}
-          <tr>
-            <td><strong>{m.san}</strong></td>
-            <td>{m.total.toLocaleString()}</td>
-            <td>{Math.round(m.average_rating)}</td>
-            <td>
-              <div class="bar-wrap">
-                <div
-                  class="bar"
-                  style="width: {winRatePct(m)}"
-                ></div>
-                <span>{winRatePct(m)}</span>
-              </div>
-            </td>
-          </tr>
-        {/each}
-      </tbody>
-    </table>
+    <div class="status">Make a move to see position metadata.</div>
   {/if}
 </div>
 
@@ -96,12 +54,7 @@
     height: 100%;
     overflow-y: auto;
   }
-  header {
-    display: flex;
-    align-items: baseline;
-    gap: 10px;
-    margin-bottom: 8px;
-  }
+  header { margin-bottom: 8px; }
   h3 {
     margin: 0;
     font-size: 13px;
@@ -110,50 +63,12 @@
     text-transform: uppercase;
     letter-spacing: 0.05em;
   }
-  .opening-tag {
-    color: var(--fg-2);
-    font-size: 11px;
-    font-family: var(--font-mono);
-  }
   .status {
-    color: var(--fg-2);
-    font-style: italic;
+    color: var(--fg-1);
     padding: 8px 0;
-  }
-  .status.err {
-    color: var(--error);
-  }
-  table.moves {
-    width: 100%;
-    border-collapse: collapse;
     font-size: 12px;
   }
-  th, td {
-    text-align: left;
-    padding: 4px 6px;
-    border-bottom: 1px solid var(--bg-2);
-  }
-  th {
-    color: var(--fg-2);
-    font-size: 10px;
-    text-transform: uppercase;
-    font-weight: 600;
-  }
-  .bar-wrap {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    position: relative;
-  }
-  .bar {
-    height: 8px;
-    background: var(--accent);
-    border-radius: 2px;
-    max-width: 60%;
-  }
-  .bar-wrap span {
-    font-size: 10px;
-    font-family: var(--font-mono);
-    color: var(--fg-1);
-  }
+  .status strong { color: var(--fg-0); font-family: var(--font-mono); }
+  .hint { color: var(--fg-2); font-style: italic; font-size: 11px; margin: 4px 0 0 0; }
+  .status.err { color: var(--error); }
 </style>

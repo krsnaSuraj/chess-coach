@@ -177,7 +177,7 @@ def install_lc0(force: bool = False) -> bool:
 
 def install_maia(elos: list[int] | None = None, force: bool = False) -> bool:
     """Download + verify Maia weight files. Default: 1100, 1500, 1900."""
-    _print("\n[3/3] Maia-1 v1.0 weights")
+    _print("\n[3/3] Maia-1 v1.0 weights") 
     LC0_WEIGHTS_DIR.mkdir(parents=True, exist_ok=True)
     elos = elos or [1100, 1500, 1900]
     all_ok = True

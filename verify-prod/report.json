@@ -1,0 +1,121 @@
+{
+  "url": "http://127.0.0.1:8000",
+  "timestamp": "2026-06-07T11:18:38.073Z",
+  "total": 22,
+  "passed": 22,
+  "failed": 0,
+  "checks": [
+    {
+      "id": "initial_load",
+      "pass": true,
+      "detail": "status=200"
+    },
+    {
+      "id": "sveltekit_hydrated",
+      "pass": true,
+      "detail": "title=Chess Coach v3.0.0 SOTA"
+    },
+    {
+      "id": "board_pieces",
+      "pass": true,
+      "detail": "pieceCount=33"
+    },
+    {
+      "id": "chessground_mounted",
+      "pass": true,
+      "detail": "cgBoard=1"
+    },
+    {
+      "id": "websocket_connected",
+      "pass": true,
+      "detail": "dotClass=\"status-dot open svelte-1piydef\", connText=\"open\""
+    },
+    {
+      "id": "status_bar_eval_winprob",
+      "pass": true,
+      "detail": "eval=\"-0.41\", winprob=\"W 46%\""
+    },
+    {
+      "id": "status_bar",
+      "pass": true,
+      "detail": "statusBarCount=1"
+    },
+    {
+      "id": "eval_bar_present",
+      "pass": true,
+      "detail": "evalBarCount=1"
+    },
+    {
+      "id": "move_list",
+      "pass": true,
+      "detail": "moveListCount=1"
+    },
+    {
+      "id": "accuracy_graph_canvas",
+      "pass": true,
+      "detail": "canvasCount=1"
+    },
+    {
+      "id": "opening_explorer",
+      "pass": true,
+      "detail": "explorerCount=1"
+    },
+    {
+      "id": "engine_selector",
+      "pass": true,
+      "detail": "engineCount=1"
+    },
+    {
+      "id": "theme_switcher_visible",
+      "pass": true,
+      "detail": "themeSwitcherCount=1"
+    },
+    {
+      "id": "theme_switched_to_forest",
+      "pass": true,
+      "detail": "data-theme=forest"
+    },
+    {
+      "id": "engine_menu_open",
+      "pass": true,
+      "detail": "engineItems=7"
+    },
+    {
+      "id": "engine_switched",
+      "pass": true,
+      "detail": "engineName=stockfish"
+    },
+    {
+      "id": "human_move_made",
+      "pass": true,
+      "detail": "e4 in DOM=true"
+    },
+    {
+      "id": "best_line_arrows",
+      "pass": true,
+      "detail": "lines=1, paths=1, firstSvg={\"hasLine\":true,\"hasPath\":true,\"innerLength\":486,\"firstChildTag\":\"defs\"}"
+    },
+    {
+      "id": "new_game_works",
+      "pass": true,
+      "detail": "clicked New"
+    },
+    {
+      "id": "undo_works",
+      "pass": true,
+      "detail": "clicked Undo"
+    },
+    {
+      "id": "flip_works",
+      "pass": true,
+      "detail": "clicked Flip"
+    },
+    {
+      "id": "mobile_responsive",
+      "pass": true,
+      "detail": "mobilePieces=33"
+    }
+  ],
+  "consoleErrors": [],
+  "failedRequests": []
+}

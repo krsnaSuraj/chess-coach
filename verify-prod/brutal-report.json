@@ -1,0 +1,187 @@
+[
+  {
+    "id": "api_health",
+    "pass": true,
+    "detail": "{\"status\":\"ok\",\"engine_running\":true}"
+  },
+  {
+    "id": "humanizer_get",
+    "pass": true,
+    "detail": "status=200, keys=11"
+  },
+  {
+    "id": "humanizer_post",
+    "pass": true,
+    "detail": "status=200"
+  },
+  {
+    "id": "coach_accuracy",
+    "pass": false,
+    "detail": "status=422, keys=1"
+  },
+  {
+    "id": "coach_critical_moments",
+    "pass": false,
+    "detail": "status=405, moments=?"
+  },
+  {
+    "id": "coach_plan",
+    "pass": false,
+    "detail": "status=422, data={\"detail\":[{\"type\":\"missing\",\"loc\":[\"body\",\"fen\"],\"msg\":\"Field required\",\"input\":{\"pgn\":\"1. e4 e5 2. Nf3 Nc6 3. Bb5 a6\"}},{\"type\":\"missing\",\"loc\":[\"body\",\"pv\"],\"msg\":\"Field required\",\"input\":{\"pgn\":\"1"
+  },
+  {
+    "id": "coach_blunder",
+    "pass": false,
+    "detail": "status=422, keys=1"
+  },
+  {
+    "id": "coach_patterns",
+    "pass": false,
+    "detail": "status=405, keys=1"
+  },
+  {
+    "id": "puzzles_list",
+    "pass": true,
+    "detail": "status=200, count=61"
+  },
+  {
+    "id": "puzzles_random",
+    "pass": true,
+    "detail": "status=200, hasId=true"
+  },
+  {
+    "id": "puzzle_by_id",
+    "pass": true,
+    "detail": "status=200"
+  },
+  {
+    "id": "engine_personalities",
+    "pass": true,
+    "detail": "count=5"
+  },
+  {
+    "id": "engine_match_start",
+    "pass": true,
+    "detail": "status=200, data={\"error\":\"color must be w or b: white\"}"
+  },
+  {
+    "id": "export_pgn",
+    "pass": false,
+    "detail": "status=422"
+  },
+  {
+    "id": "caps_last",
+    "pass": true,
+    "detail": "status=200, hasCaps=false"
+  },
+  {
+    "id": "motifs_position",
+    "pass": true,
+    "detail": "status=200"
+  },
+  {
+    "id": "risk_game",
+    "pass": true,
+    "detail": "status=200, level=moderate"
+  },
+  {
+    "id": "elo_estimate",
+    "pass": true,
+    "detail": "status=200, meanElo=1556.1"
+  },
+  {
+    "id": "undo_api",
+    "pass": true,
+    "detail": "status=200, fenAfter=rnbqkbnr/pppppppp/8/8/8/8/PPPP"
+  },
+  {
+    "id": "redo_api",
+    "pass": true,
+    "detail": "status=200, fenAfter=rnbqkbnr/pppppppp/8/8/4P3/8/PP"
+  },
+  {
+    "id": "game_state",
+    "pass": true,
+    "detail": "status=200, mode=coach"
+  },
+  {
+    "id": "illegal_move_rejected",
+    "pass": true,
+    "detail": "ok=false, err=Invalid move format"
+  },
+  {
+    "id": "malformed_pgn_handled",
+    "pass": true,
+    "detail": "status=422"
+  },
+  {
+    "id": "spa_fallback",
+    "pass": true,
+    "detail": "len=1538, hasSveltekit=true"
+  },
+  {
+    "id": "sveltekit_asset",
+    "pass": true,
+    "detail": "version=1780831081106"
+  },
+  {
+    "id": "favicon_served",
+    "pass": true,
+    "detail": "status=200, type=image/svg+xml"
+  },
+  {
+    "id": "audio_context_available",
+    "pass": true,
+    "detail": "state=running"
+  },
+  {
+    "id": "theme_midnight",
+    "pass": true,
+    "detail": "applied=true (data-theme=midnight)"
+  },
+  {
+    "id": "theme_forest",
+    "pass": true,
+    "detail": "applied=true (data-theme=forest)"
+  },
+  {
+    "id": "theme_sunset",
+    "pass": true,
+    "detail": "applied=true (data-theme=sunset)"
+  },
+  {
+    "id": "theme_marble",
+    "pass": true,
+    "detail": "applied=true (data-theme=marble)"
+  },
+  {
+    "id": "theme_lichess",
+    "pass": true,
+    "detail": "applied=true (data-theme=lichess)"
+  },
+  {
+    "id": "theme_blue_glass",
+    "pass": true,
+    "detail": "applied=true (data-theme=blue_glass)"
+  },
+  {
+    "id": "theme_cyber_neon",
+    "pass": true,
+    "detail": "applied=true (data-theme=cyber_neon)"
+  },
+  {
+    "id": "theme_sepia",
+    "pass": true,
+    "detail": "applied=true (data-theme=sepia)"
+  },
+  {
+    "id": "theme_paper",
+    "pass": true,
+    "detail": "applied=true (data-theme=paper)"
+  },
+  {
+    "id": "theme_high_contrast",
+    "pass": true,
+    "detail": "applied=true (data-theme=high_contrast)"
+  }
+]

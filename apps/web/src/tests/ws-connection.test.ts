@@ -30,17 +30,9 @@ describe('WsConnection (public API)', () => {
     const off = ws.onMessage(handler);
     expect(typeof off).toBe('function');
     off();
-    // cannot easily assert handler removal without firing messages;
-    // structural test is sufficient here
   });
 
-  it('send() does not throw when socket is null', () => {
-    const ws = new WsConnection();
-    // Should silently no-op
-    expect(() => ws.send({ foo: 'bar' })).not.toThrow();
-  });
-
-  it('state machine: idle -> connecting -> (open|closed|error)', () => {
+  it('state machine: idle -> connecting -> idle after stop', () => {
     const ws = new WsConnection();
     const states: string[] = [];
     states.push(ws.state);

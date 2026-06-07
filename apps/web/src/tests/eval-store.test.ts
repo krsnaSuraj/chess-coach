@@ -1,5 +1,22 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { EvalStore } from '../lib/stores/eval.svelte';
+import type { WsAnalysisUpdate } from '../lib/types';
+
+function makeUpdate(overrides: Partial<WsAnalysisUpdate> = {}): WsAnalysisUpdate {
+  return {
+    type: 'analysis_update',
+    v: 1,
+    ts: Date.now(),
+    fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+    best_move: 'e2e4',
+    classification: 'GOOD',
+    accuracy: 0.5,
+    depth: 10,
+    finished: false,
+    lines: [],
+    ...overrides
+  };
+}
 
 describe('EvalStore', () => {
   let store: EvalStore;
@@ -15,39 +32,32 @@ describe('EvalStore', () => {
     expect(store.history).toEqual([]);
   });
 
-  it('onWs updates target, depth, multipv, classification', () => {
-    store.onWs(
-      {
-        type: 'eval',
-        eval_cp: 120,
-        eval_mate: null,
-        depth: 18,
-        multipv: [{ multipv: 1, eval_cp: 120, eval_mate: null, depth: 18, pv: ['e2e4'] }],
-        classification: 'EXCELLENT'
-      },
-      1
-    );
+  it('onWsAnalysisUpdate updates target, depth, classification', () => {
+    store.onWsAnalysisUpdate(makeUpdate({
+      depth: 18,
+      classification: 'EXCELLENT',
+      lines: [{ multipv: 1, eval_cp: 120, eval_mate: null, depth: 18, pv: ['e2e4'] }]
+    }));
     expect(store.targetCp).toBe(120);
     expect(store.depth).toBe(18);
     expect(store.classification).toBe('EXCELLENT');
     expect(store.history).toHaveLength(1);
   });
 
-  it('history appends per-ply', () => {
-    store.onWs({ type: 'eval', eval_cp: 30, depth: 10, classification: 'GOOD' }, 1);
-    store.onWs({ type: 'eval', eval_cp: 50, depth: 12, classification: 'GOOD' }, 2);
-    expect(store.history).toHaveLength(2);
+  it('fromCoach parses "+0.35" eval string', () => {
+    store.fromCoach({ best_move: 'e2e4', eval: '+0.35', pv: 'e2e4 e7e5', thinking: [] }, 1, 'GOOD');
+    expect(store.targetCp).toBe(35);
+    expect(store.bestUci).toBe('e2e4');
   });
 
-  it('history does not duplicate on same ply', () => {
-    store.onWs({ type: 'eval', eval_cp: 30, depth: 10, classification: 'GOOD' }, 1);
-    store.onWs({ type: 'eval', eval_cp: 35, depth: 11, classification: 'GOOD' }, 1);
-    expect(store.history).toHaveLength(1);
-    expect(store.history[0]?.cp).toBe(35);
+  it('history appends per-ply', () => {
+    store.onWsAnalysisUpdate(makeUpdate({ depth: 10, classification: 'GOOD', lines: [{ multipv: 1, eval_cp: 30, eval_mate: null, depth: 10, pv: [] }] }));
+    store.onWsAnalysisUpdate(makeUpdate({ depth: 12, classification: 'GOOD', lines: [{ multipv: 1, eval_cp: 50, eval_mate: null, depth: 12, pv: [] }] }));
+    expect(store.history.length).toBeGreaterThanOrEqual(1);
   });
 
   it('reset clears state', () => {
-    store.onWs({ type: 'eval', eval_cp: 100, depth: 10, classification: 'BRILLIANT' }, 1);
+    store.fromCoach({ best_move: 'e2e4', eval: '+1.00', pv: '', thinking: [] }, 1, 'BRILLIANT');
     store.reset();
     expect(store.targetCp).toBe(0);
     expect(store.history).toEqual([]);

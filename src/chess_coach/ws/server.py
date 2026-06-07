@@ -10,7 +10,14 @@ import asyncio
 import logging
 from typing import Any
 
-from chess_coach.ws.protocol import WsMessage
+# IMPORTANT: must be at module level, not inside attach_websocket, so that
+# FastAPI's get_dependant can resolve the `WebSocket` type annotation on
+# the inner `ws_endpoint` closure (combined with `from __future__ import
+# annotations`, annotations become strings and FastAPI evaluates them in
+# the function's __globals__).
+from fastapi import WebSocket, WebSocketDisconnect
+
+from chess_coach.ws.protocol import WsMessage, MessageType
 
 logger = logging.getLogger(__name__)
 
@@ -69,12 +76,10 @@ def attach_websocket(app: Any, path: str = "/ws") -> WsBroadcaster:
         # somewhere:
         await broadcaster.broadcast(analysis_update.to_message())
     """
-    from fastapi import WebSocket, WebSocketDisconnect
-
     broadcaster = WsBroadcaster()
 
     @app.websocket(path)
-    async def ws_endpoint(websocket: WebSocket) -> None:  # type: ignore[unused-ignore]
+    async def ws_endpoint(websocket: WebSocket) -> None:
         await websocket.accept()
         await broadcaster.register(websocket)
         try:
@@ -82,7 +87,7 @@ def attach_websocket(app: Any, path: str = "/ws") -> WsBroadcaster:
                 raw = await websocket.receive_text()
                 msg = WsMessage.from_json(raw)
                 if msg.type.value == "ping":
-                    pong = WsMessage(type=msg.type.__class__("pong"), data=msg.data)
+                    pong = WsMessage(type=MessageType("pong"), data=msg.data)
                     await websocket.send_text(pong.to_json())
         except WebSocketDisconnect:
             pass
