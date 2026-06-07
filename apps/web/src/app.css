@@ -170,6 +170,7 @@ html, body {
 /* chessground base CSS (required: cg-container/cg-board need position:absolute) */
 @import 'chessground/assets/chessground.base.css';
 @import 'chessground/assets/chessground.brown.css';
+@import 'chessground/assets/chessground.cburnett.css';
 
 /* chessground overrides — board square colors come from data-theme */
 .cg-wrap {

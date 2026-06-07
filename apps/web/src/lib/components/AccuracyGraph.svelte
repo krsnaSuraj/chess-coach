@@ -9,7 +9,7 @@
   let {
     evalStore,
     visible = true,
-    height = 120
+    height = 144
   }: {
     evalStore: EvalStore;
     visible?: boolean;

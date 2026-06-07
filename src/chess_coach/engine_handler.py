@@ -81,6 +81,43 @@ class EngineHandler(QObject):
         except Exception as e:
             self.error_occurred.emit(str(e))
 
+    def swap_engine(self, key: str) -> str:
+        """Restart with a different UCI engine binary.
+
+        For SOTA NNUE engines (Berserk, Caissa, Crystal, Patricia, ShashChess)
+        this looks for the binary in PATH or the project's engines/ directory.
+        For Maia-2 this switches the multi-engine handler into Maia mode.
+
+        Returns the path that was activated, or '' if the engine is not
+        installed and we fell back to the existing binary. The caller decides
+        what to show in the status bar.
+        """
+        from chess_coach.dialogs import resolve_engine_binary
+
+        if key == "maia2":
+            # Maia is wired through multi_engine_handler; do not swap the UCI
+            # engine here. Just toggle the multi-handler's enable flag.
+            if self._multi is None:
+                self._multi = MultiEngineHandler()
+            self._multi._enable_maia = True  # type: ignore[attr-defined]
+            return "maia2"
+
+        target = resolve_engine_binary(key)
+        if not target:
+            # Engine not installed — keep the running engine and signal back.
+            return ""
+
+        # Persist the new path in the config dict so subsequent restarts use it.
+        self.config.setdefault("engine", {})["path"] = target
+        self.engine_path = target
+        self.stop_engine()
+        try:
+            self.start_engine()
+        except Exception as e:  # noqa: BLE001
+            self.error_occurred.emit(f"Engine swap to {key} failed: {e}")
+            return ""
+        return target
+
     def stop_engine(self) -> None:
         self._stop_current_thread_async()
         if self.engine:

@@ -204,19 +204,19 @@
         onPromotionRequest={handlePromotionRequest}
       />
     </div>
+    <aside class="side-panel">
+      <section class="moves-section">
+        <h3>Moves</h3>
+        <MoveList {game} />
+      </section>
+      <section class="explorer-section">
+        <OpeningExplorer {game} />
+      </section>
+    </aside>
   </div>
 
   <div class="bottom">
-    <div class="moves-col">
-      <h3>Moves</h3>
-      <MoveList {game} />
-    </div>
-    <div class="graph-col">
-      <AccuracyGraph {evalStore} visible={settings.data.showAccuracyGraph} />
-    </div>
-    <div class="explorer-col">
-      <OpeningExplorer {game} />
-    </div>
+    <AccuracyGraph {evalStore} visible={settings.data.showAccuracyGraph} />
   </div>
 
   <footer class="hud">
@@ -259,7 +259,7 @@
 <style>
   .app {
     display: grid;
-    grid-template-rows: 38px 1fr auto 32px;
+    grid-template-rows: 38px 1fr 160px 32px;
     height: 100vh;
     width: 100vw;
     background: var(--bg-0);
@@ -268,27 +268,34 @@
   }
   .board-zone {
     display: grid;
-    grid-template-columns: 28px 1fr;
-    gap: 12px;
-    padding: 12px;
+    grid-template-columns: 50px 1fr 300px;
+    gap: 10px;
+    padding: 10px;
     overflow: hidden;
     align-items: stretch;
-    max-height: calc(100vh - 38px - 180px - 32px);
+    min-height: 0;
   }
   .board-wrap {
     display: flex;
     align-items: center;
     justify-content: center;
+    min-width: 0;
+    min-height: 0;
   }
-  .bottom {
+  .side-panel {
     display: grid;
-    grid-template-columns: 1fr 1fr 1.2fr;
+    grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
     gap: 8px;
-    padding: 8px 12px;
-    max-height: 180px;
+    min-height: 0;
     overflow: hidden;
   }
-  .moves-col h3 {
+  .moves-section, .explorer-section {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .moves-section h3 {
     margin: 0 0 4px 0;
     font-size: 11px;
     text-transform: uppercase;
@@ -296,12 +303,10 @@
     font-weight: 700;
     letter-spacing: 0.05em;
   }
-  .moves-col {
-    display: flex;
-    flex-direction: column;
-    min-height: 0;
+  .bottom {
+    padding: 0 10px 8px 10px;
+    overflow: hidden;
   }
-  .graph-col, .explorer-col { min-height: 0; }
   .hud {
     display: flex;
     justify-content: space-between;
@@ -319,4 +324,14 @@
   }
   .hint { color: var(--fg-2); }
   .status { color: var(--fg-1); }
+
+  /* responsive: hide right panel on narrow screens, keep moves+explorer stack */
+  @media (max-width: 900px) {
+    .app { grid-template-rows: 38px 1fr 140px 32px; }
+    .board-zone { grid-template-columns: 36px 1fr; }
+    .side-panel { display: none; }
+  }
+  @media (max-width: 600px) {
+    .board-zone { grid-template-columns: 24px 1fr; }
+  }
 </style>

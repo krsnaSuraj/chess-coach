@@ -62,10 +62,10 @@
 <style>
   .eval-bar {
     position: relative;
-    width: 28px;
+    width: 50px;
     height: 100%;
     background: var(--bg-3);
-    border-radius: 3px;
+    border-radius: 4px;
     overflow: hidden;
     user-select: none;
   }
@@ -77,22 +77,23 @@
   }
   .eval-bar-fill.white {
     top: 0;
-    background: linear-gradient(180deg, #f0f0f0, #d6d6d6);
+    background: linear-gradient(180deg, #f5f5f5, #d6d6d6);
   }
   .eval-bar-fill.black {
     bottom: 0;
-    background: linear-gradient(0deg, #2a2a2a, #444);
+    background: linear-gradient(0deg, #1a1a1a, #3a3a3a);
   }
   .eval-label {
     position: absolute;
     left: 50%;
     transform: translate(-50%, -50%);
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 700;
     font-family: var(--font-mono);
     line-height: 1;
     pointer-events: none;
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
     z-index: 2;
+    white-space: nowrap;
   }
 </style>

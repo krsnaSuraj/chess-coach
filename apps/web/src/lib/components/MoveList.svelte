@@ -78,7 +78,8 @@
     gap: 3px;
     padding: 8px;
     overflow-y: auto;
-    height: 100%;
+    flex: 1 1 0;
+    min-height: 0;
     background: var(--bg-1);
     border-radius: 6px;
   }
@@ -91,7 +92,8 @@
   .row {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 4px;
+    flex-wrap: wrap;
   }
   .num {
     color: var(--fg-2);

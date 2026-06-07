@@ -1,6 +1,6 @@
 {
   "url": "http://127.0.0.1:8000",
-  "timestamp": "2026-06-07T11:18:38.073Z",
+  "timestamp": "2026-06-07T11:48:55.419Z",
   "total": 22,
   "passed": 22,
   "failed": 0,
@@ -33,7 +33,7 @@
     {
       "id": "status_bar_eval_winprob",
       "pass": true,
-      "detail": "eval=\"-0.41\", winprob=\"W 46%\""
+      "detail": "eval=\"-0.33\", winprob=\"W 47%\""
     },
     {
       "id": "status_bar",

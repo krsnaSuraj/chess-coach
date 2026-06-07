@@ -164,9 +164,10 @@ class MainWindow(QMainWindow):
         menubar.addMenu(lichess_menu)
 
         variants_menu = QMenu("Variants", self)
-        for variant in ("Chess960", "King of the Hill", "Three-Check", "Atomic", "Crazyhouse", "Horde", "Racing Kings", "Antichess"):
-            act = QAction(variant, self)
-            act.triggered.connect(lambda _checked=False, v=variant: self._open_variant(v))
+        from chess_coach.variants.registry import VARIANTS as _REGISTERED_VARIANTS
+        for variant in _REGISTERED_VARIANTS:
+            act = QAction(f"{variant.icon}  {variant.display_name}", self)
+            act.triggered.connect(lambda _checked=False, k=variant.key: self._open_variant(k))
             variants_menu.addAction(act)
         menubar.addMenu(variants_menu)
 
@@ -895,83 +896,101 @@ class MainWindow(QMainWindow):
             return f"<b>Module:</b> <code>{dotted}</code><br><br><i>Not loaded: {e}</i>"
 
     def _select_engine(self, key: str) -> None:
-        labels = {
-            "stockfish": "Stockfish 18",
-            "berserk": "Berserk",
-            "caissa": "Caissa",
-            "crystal": "Crystal",
-            "patricia": "Patricia",
-            "shashchess": "ShashChess",
-            "maia2": "Maia-2",
-        }
+        from chess_coach.dialogs import engine_label
         for k, act in self._engine_actions.items():
             act.setChecked(k == key)
-        self.statusBar().showMessage(
-            f"Engine: {labels.get(key, key)}  (restart analysis to take effect)",
-            4000,
-        )
+        # Actually swap the engine binary (if installed). Maia-2 is handled
+        # separately through multi_engine_handler and always reports OK.
+        activated = self.engine_handler.swap_engine(key)
+        if activated == "maia2":
+            self.statusBar().showMessage(
+                f"Engine: {engine_label(key)} (Maia integration enabled, restart analysis)",
+                4000,
+            )
+        elif activated:
+            self.statusBar().showMessage(
+                f"Engine: {engine_label(key)} swapped to {activated}",
+                4000,
+            )
+            # Trigger a fresh analysis with the new engine.
+            self.run_analysis()
+        else:
+            self.statusBar().showMessage(
+                f"Engine: {engine_label(key)} binary not installed — keeping current engine",
+                4000,
+            )
 
     def _open_cloud_eval(self) -> None:
-        QMessageBox.information(
-            self,
-            "Lichess Cloud Eval",
-            self._module_summary("chess_coach.lichess.cloud_eval"),
-        )
+        from chess_coach.dialogs import CloudEvalDialog
+        CloudEvalDialog(self.board, self).exec()
 
     def _open_oprep(self) -> None:
-        QMessageBox.information(self, "Opening Repertoire", self._module_summary("chess_coach.coach.oprep"))
+        from chess_coach.dialogs import OpeningRepertoireDialog
+        OpeningRepertoireDialog(self.board, self).exec()
 
     def _open_weakness(self) -> None:
-        QMessageBox.information(self, "Weakness Analysis", self._module_summary("chess_coach.coach.weakness"))
+        from chess_coach.dialogs import WeaknessAnalysisDialog
+        WeaknessAnalysisDialog(self.board, self).exec()
 
     def _open_training(self) -> None:
-        QMessageBox.information(self, "Training Plan", self._module_summary("chess_coach.coach.training_plan"))
+        from chess_coach.dialogs import TrainingPlanDialog
+        TrainingPlanDialog(self.board, self).exec()
 
     def _open_arena(self) -> None:
-        QMessageBox.information(self, "Arena Tournament", self._module_summary("chess_coach.tournament.arena"))
+        from chess_coach.dialogs import ArenaDialog
+        ArenaDialog(self).exec()
 
     def _open_swiss(self) -> None:
-        QMessageBox.information(self, "Swiss Tournament", self._module_summary("chess_coach.tournament.swiss"))
+        from chess_coach.dialogs import SwissDialog
+        SwissDialog(self).exec()
 
     def _open_bracket(self) -> None:
-        QMessageBox.information(self, "Bracket Tournament", self._module_summary("chess_coach.tournament.bracket"))
+        from chess_coach.dialogs import BracketDialog
+        BracketDialog(self).exec()
 
     def _open_lichess_account(self) -> None:
-        QMessageBox.information(self, "Lichess Account", self._module_summary("chess_coach.lichess.account"))
+        from chess_coach.dialogs import LichessAccountDialog
+        LichessAccountDialog(self).exec()
 
     def _open_lichess_tournaments(self) -> None:
-        QMessageBox.information(self, "Lichess Tournaments", self._module_summary("chess_coach.lichess.tournaments"))
+        from chess_coach.dialogs import LichessTournamentsDialog
+        LichessTournamentsDialog(self).exec()
 
     def _open_lichess_challenges(self) -> None:
-        QMessageBox.information(self, "Lichess Challenges", self._module_summary("chess_coach.lichess.challenges"))
+        from chess_coach.dialogs import LichessChallengesDialog
+        LichessChallengesDialog(self).exec()
 
     def _open_lichess_board(self) -> None:
-        QMessageBox.information(self, "Lichess Board", self._module_summary("chess_coach.lichess.board"))
+        from chess_coach.dialogs import LichessBoardDialog
+        LichessBoardDialog(self).exec()
 
     def _open_lichess_broadcasts(self) -> None:
-        QMessageBox.information(self, "Lichess Broadcasts", self._module_summary("chess_coach.lichess.broadcasts"))
+        from chess_coach.dialogs import LichessBroadcastsDialog
+        LichessBroadcastsDialog(self).exec()
 
     def _open_lichess_simuls(self) -> None:
-        QMessageBox.information(self, "Lichess Simuls", self._module_summary("chess_coach.lichess.simuls"))
+        from chess_coach.dialogs import LichessSimulsDialog
+        LichessSimulsDialog(self).exec()
 
     def _open_lichess_teams(self) -> None:
-        QMessageBox.information(self, "Lichess Teams", self._module_summary("chess_coach.lichess.teams"))
+        from chess_coach.dialogs import LichessTeamsDialog
+        LichessTeamsDialog(self).exec()
 
     def _open_lichess_studies(self) -> None:
-        QMessageBox.information(self, "Lichess Studies", self._module_summary("chess_coach.lichess.study_sync"))
+        from chess_coach.dialogs import LichessStudiesDialog
+        LichessStudiesDialog(self).exec()
 
     def _open_lichess_fide(self) -> None:
-        QMessageBox.information(self, "FIDE Players", self._module_summary("chess_coach.lichess.fide"))
+        from chess_coach.dialogs import LichessFideDialog
+        LichessFideDialog(self).exec()
 
     def _open_lichess_users(self) -> None:
-        QMessageBox.information(self, "Lichess Users", self._module_summary("chess_coach.lichess.users"))
+        from chess_coach.dialogs import LichessUsersDialog
+        LichessUsersDialog(self).exec()
 
-    def _open_variant(self, name: str) -> None:
-        QMessageBox.information(
-            self,
-            f"Variant: {name}",
-            self._module_summary("chess_coach.variants.registry") + f"<br><br>Selected variant: <b>{name}</b>",
-        )
+    def _open_variant(self, key: str) -> None:
+        from chess_coach.dialogs import VariantDialog
+        VariantDialog(key, self).exec()
 
 
 class HumanizerConfigDialog(QDialog):

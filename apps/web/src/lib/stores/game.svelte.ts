@@ -34,6 +34,9 @@ export class GameStore {
   orientation = $state<'white' | 'black'>('white');
   error = $state<string | null>(null);
   loading = $state(false);
+  // Stashed entry popped by undo so a subsequent redo can restore it.
+  // Cleared on newGame, on a fresh playMove, and on undo of a redo'd move.
+  private _pendingRedo: HistoryEntry | null = null;
 
   // FEN at the current cursor (live or historical)
   displayedFen = $derived.by(() => {
@@ -80,6 +83,7 @@ export class GameStore {
   async newGame(humanIsWhite = true) {
     this.history = [];
     this.cursor = -1;
+    this._pendingRedo = null;
     const s = await api.startGame(humanIsWhite);
     this.state = s;
     this.error = s.error;
@@ -136,6 +140,7 @@ export class GameStore {
         played_by: 'human'
       };
       this.history = [...this.history, humanEntry];
+      this._pendingRedo = null;
       this.cursor = -1;
       return true;
     } catch (e) {
@@ -149,7 +154,13 @@ export class GameStore {
       const res = await api.undo();
       this.state = res;
       this.error = res.error;
-      if (this.history.length > 0) this.history = this.history.slice(0, -1);
+      if (this.history.length > 0) {
+        const popped = this.history[this.history.length - 1]!;
+        this.history = this.history.slice(0, -1);
+        this._pendingRedo = popped;
+      } else {
+        this._pendingRedo = null;
+      }
       this.cursor = -1;
     } catch (e) {
       this.error = e instanceof Error ? e.message : String(e);
@@ -161,8 +172,11 @@ export class GameStore {
       const res = await api.redo();
       this.state = res;
       this.error = res.error;
-      // We don't have the redo'd move's SAN locally; just bump the count.
-      // The user can hit refresh to resync.
+      if (this._pendingRedo) {
+        this.history = [...this.history, this._pendingRedo];
+        this._pendingRedo = null;
+      }
+      this.cursor = -1;
     } catch (e) {
       this.error = e instanceof Error ? e.message : String(e);
     }

@@ -161,8 +161,10 @@
 <style>
   .board-host {
     /* Make it a square that fills its grid cell up to a sensible cap.
-       Use viewport-relative units so resizing always produces a square. */
-    width: min(100%, calc(100vh - 38px - 180px - 32px - 56px));
+       Use viewport-relative units so resizing always produces a square.
+       Layout: status(38) + board-zone(1fr) + graph(160) + hud(32).
+       board-zone padding 10+10; eval bar lives in its own 50px column. */
+    width: min(100%, calc(100vh - 250px));
     aspect-ratio: 1 / 1;
     max-width: 720px;
     max-height: 720px;
