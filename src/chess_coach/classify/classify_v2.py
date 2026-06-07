@@ -13,15 +13,11 @@ import enum
 from dataclasses import dataclass, field
 from typing import Iterable
 
-import chess
-
 from chess_coach.classify.epd import (
-    EPD_THRESHOLDS,
-    cp_to_winrate,
     epd_to_class,
     winrate_to_epd,
 )
-from chess_coach.classify.phase_detector import GamePhase, detect_phase
+from chess_coach.classify.phase_detector import GamePhase
 
 
 class MoveClass(str, enum.Enum):

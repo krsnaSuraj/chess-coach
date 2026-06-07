@@ -7,12 +7,7 @@ import chess
 import chess.engine
 from PyQt6.QtCore import QThread, pyqtSignal, QObject
 
-from chess_coach.multi_engine_handler import (
-    MultiEngineHandler,
-    MultiEngineConfig,
-    MaiaConfig,
-    StockfishAnalysisThread,
-)
+from chess_coach.multi_engine_handler import MultiEngineHandler
 
 logger = logging.getLogger(__name__)
 

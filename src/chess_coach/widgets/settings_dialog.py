@@ -6,7 +6,6 @@ Opened from main menu via Settings... action (F2).
 from __future__ import annotations
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QTabWidget, QWidget, QFormLayout,
     QSpinBox, QDoubleSpinBox, QCheckBox, QComboBox, QSlider, QLabel,

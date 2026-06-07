@@ -13,8 +13,8 @@ from chess_coach.theme_manager import (
 
 
 class TestThemeRegistry:
-    def test_has_8_themes(self):
-        assert len(THEMES) == 8
+    def test_has_10_themes(self):
+        assert len(THEMES) == 10
 
     def test_all_themes_have_unique_names(self):
         names = [t.name for t in THEMES.values()]
@@ -94,9 +94,9 @@ class TestGetTheme:
 
 
 class TestListThemes:
-    def test_returns_8_metadata_dicts(self):
+    def test_returns_10_metadata_dicts(self):
         themes = list_themes()
-        assert len(themes) == 8
+        assert len(themes) == 10
         for t in themes:
             assert "name" in t
             assert "display_name" in t

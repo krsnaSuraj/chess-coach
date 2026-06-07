@@ -5,7 +5,7 @@ import os
 from PyQt6.QtWidgets import QWidget
 
 from chess_coach.promotion_dialog import PromotionDialog
-from chess_coach.theme_manager import Theme, get_theme, ThemeManager
+from chess_coach.theme_manager import Theme, get_theme
 from PyQt6.QtGui import (
     QPainter, QColor, QPen, QFont, QPixmap, QPainterPath,
     QResizeEvent, QPaintEvent, QMouseEvent, QCursor,

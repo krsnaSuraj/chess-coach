@@ -14,9 +14,7 @@ from __future__ import annotations
 
 import concurrent.futures
 import logging
-import time
 from dataclasses import dataclass
-from typing import Iterable
 
 from chess_coach.engines.base import Engine, Evaluation
 
@@ -111,7 +109,7 @@ class MultiEnginePool:
         all_lines: list[dict] = []
         for ev in evals:
             engine_weight = next(
-                (w.weight for w in self._weights if w.engine is not ev.source_engine and w.engine.info().name in ev.source_engine),
+                (w.weight for w in self._weights if w.engine.info().name in ev.source_engine),
                 1.0,
             )
             if not ev.multipv:

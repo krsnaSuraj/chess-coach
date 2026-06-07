@@ -31,7 +31,7 @@ import os
 import struct
 import threading
 import wave
-from typing import Optional
+
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +47,7 @@ except ImportError:
     _HAS_QT = False
     logger.warning("PyQt6.QtMultimedia not available — sound disabled")
 
-from chess_coach.theme_manager import Theme, get_theme, list_themes
+from chess_coach.theme_manager import Theme, get_theme
 
 
 # ============================================================================

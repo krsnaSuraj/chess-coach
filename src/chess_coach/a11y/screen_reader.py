@@ -8,7 +8,6 @@ from __future__ import annotations
 import enum
 import time
 from dataclasses import dataclass, field
-from typing import Any
 
 
 class LiveRegion(str, enum.Enum):

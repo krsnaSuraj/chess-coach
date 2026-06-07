@@ -10,7 +10,6 @@ No QtCharts dep — pure QWidget + QPainter.
 from __future__ import annotations
 
 import math
-from typing import Optional
 
 from PyQt6.QtCore import Qt, QRectF, QPropertyAnimation, pyqtProperty, QEasingCurve
 from PyQt6.QtGui import QPainter, QColor, QLinearGradient, QPen, QFont

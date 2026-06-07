@@ -13,7 +13,9 @@ import os
 import chess
 from PyQt6.QtCore import Qt, QSize, QRectF
 from PyQt6.QtGui import QPainter, QPixmap, QColor, QFont
-from PyQt6.QtWidgets import QWidget, QHBoxLayout, QLabel, QSizePolicy
+from PyQt6.QtWidgets import (
+    QWidget, QSizePolicy,
+)
 
 from chess_coach.theme_manager import Theme, get_theme
 

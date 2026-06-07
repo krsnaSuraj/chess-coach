@@ -12,7 +12,7 @@ from pydantic import BaseModel
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
-from starlette.responses import Response
+from starlette.responses import Response, FileResponse
 
 from chess_coach.game_controller import GameController, GamePhase
 from chess_coach.config import load_config
@@ -85,6 +85,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+from chess_coach.ws.server import attach_websocket  # noqa: E402
+attach_websocket(app, path="/ws")
 
 
 class UnifiedResponse(BaseModel):
@@ -598,6 +601,10 @@ class _NoCacheStaticFiles(StaticFiles):
 HERE = os.path.dirname(os.path.abspath(__file__))
 STATIC_DIR = os.path.join(HERE, "..", "..", "static")
 if os.path.exists(STATIC_DIR):
-    app.mount("/", _NoCacheStaticFiles(directory=STATIC_DIR, html=True), name="static")
+    app.mount("/static", _NoCacheStaticFiles(directory=STATIC_DIR), name="static")
+
+    @app.get("/", include_in_schema=False)
+    async def index() -> FileResponse:
+        return FileResponse(os.path.join(STATIC_DIR, "index.html"))
 else:
     logger.warning("Static directory not found at %s — web UI will not be served", STATIC_DIR)

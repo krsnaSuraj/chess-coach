@@ -84,8 +84,9 @@
       }
     }
 
-    _squareEl(visualRow, visualCol, ...) {
+    _squareEl(visualRow, visualCol, ...args) {
       // Convenience not used here; just to satisfy closure
+      void visualRow; void visualCol; void args;
       return null;
     }
 

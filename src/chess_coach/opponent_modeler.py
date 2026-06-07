@@ -24,14 +24,12 @@ fine-grained labels are unreliable from a small sample.
 from __future__ import annotations
 
 import logging
-import math
-from collections import Counter
 from dataclasses import dataclass, field
 from enum import Enum
 
 import chess
 
-from chess_coach.elo_calibrator import BayesianELOEstimator, get_acpl_target, phase_for_move_number
+from chess_coach.elo_calibrator import BayesianELOEstimator, phase_for_move_number
 
 logger = logging.getLogger(__name__)
 

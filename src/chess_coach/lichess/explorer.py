@@ -17,7 +17,7 @@ from urllib.request import Request, urlopen
 
 logger = logging.getLogger(__name__)
 
-EXPLORER_URL = "https://explorer.lichess.ORG"
+EXPLORER_URL = "https://explorer.lichess.ovh"
 
 
 class ExplorerSource(str, enum.Enum):

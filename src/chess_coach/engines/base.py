@@ -21,6 +21,8 @@ class EngineInfo:
     elo_floor: int
     type: str  # "uci" | "maia" | "lc0" | "neural"
     requires: list[str] = field(default_factory=list)
+    url: str = ""
+    option_presets: tuple[tuple[str, Any], ...] = ()
 
 
 @dataclass

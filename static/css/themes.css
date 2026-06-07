@@ -1,5 +1,5 @@
 /* ============================================================================
-   themes.css — 8 SOTA themes for Chess Coach v3.0.0
+   themes.css — 10 SOTA themes for Chess Coach v3.0.0
    Mirror of Python theme_manager.py. Activate via data-theme="<name>" on <html>.
    CSS custom properties can be overridden by user stylesheets.
    ============================================================================ */
@@ -142,4 +142,34 @@ html[data-theme="sepia"] {
   --brilliant: #daa520;
   --easing: cubic-bezier(0.645, 0.045, 0.355, 1.000);
   --move-dur: 240ms;
+}
+
+html[data-theme="paper"] {
+  --board-light: #fdfdfd; --board-dark: #d8d8d8; --board-border: #b0b0b0;
+  --bg: #fafaf7; --sidebar: #ffffff; --card-bg: #ffffff; --card-border: #e0e0e0;
+  --accent: #1976d2; --accent-2: #455a64;
+  --success: #388e3c; --warning: #f57c00; --danger: #d32f2f;
+  --text: #212121; --text-dim: #757575;
+  --last-move: #fff59d; --check: #d32f2f; --legal-dot: #9e9e9e;
+  --capture-ring: #bdbdbd; --selected: #1976d2; --premove: #455a64;
+  --arrow-best: #388e3c; --arrow-plan: #1976d2; --arrow-threat: #d32f2f; --arrow-user: #f57c00;
+  --eval-loss: #d32f2f; --eval-draw: #9e9e9e; --eval-win: #388e3c;
+  --brilliant: #f57c00;
+  --easing: cubic-bezier(0.4, 0.0, 0.2, 1);
+  --move-dur: 200ms;
+}
+
+html[data-theme="high_contrast"] {
+  --board-light: #ffffff; --board-dark: #000000; --board-border: #000000;
+  --bg: #000000; --sidebar: #0a0a0a; --card-bg: #1a1a1a; --card-border: #ffffff;
+  --accent: #ffff00; --accent-2: #00ffff;
+  --success: #00ff00; --warning: #ffff00; --danger: #ff0000;
+  --text: #ffffff; --text-dim: #cccccc;
+  --last-move: #ffff00; --check: #ff0000; --legal-dot: #ffffff;
+  --capture-ring: #ffffff; --selected: #ffff00; --premove: #00ffff;
+  --arrow-best: #00ff00; --arrow-plan: #ffff00; --arrow-threat: #ff0000; --arrow-user: #00ffff;
+  --eval-loss: #ff0000; --eval-draw: #ffffff; --eval-win: #00ff00;
+  --brilliant: #ffff00;
+  --easing: linear;
+  --move-dur: 100ms;
 }

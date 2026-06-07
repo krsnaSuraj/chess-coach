@@ -6,9 +6,15 @@ Positioned bottom-right of parent widget by default.
 
 from __future__ import annotations
 
-from PyQt6.QtCore import Qt, QTimer, QPropertyAnimation, QEasingCurve, QPoint
-from PyQt6.QtGui import QPainter, QColor, QFont
-from PyQt6.QtWidgets import QWidget, QLabel, QHBoxLayout, QVBoxLayout, QGraphicsOpacityEffect
+from PyQt6.QtCore import (
+    Qt, QTimer, QPropertyAnimation, QEasingCurve,
+)
+from PyQt6.QtGui import (
+    QPainter, QColor,
+)
+from PyQt6.QtWidgets import (
+    QWidget, QLabel, QHBoxLayout, QGraphicsOpacityEffect,
+)
 
 from chess_coach.theme_manager import Theme, get_theme
 

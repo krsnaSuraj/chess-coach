@@ -2,27 +2,42 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 
 @dataclass(frozen=True)
 class VariantInfo:
-    key: str
-    name: str
-    description: str
-    icon: str
+    key: str = ""
+    name: str = ""
+    description: str = ""
+    icon: str = "♔"
     supported_by_engine: bool = True
     lichess_url: str = ""
+    # New SOTA fields (Phase N+)
+    display_name: str = ""
+    fen_includes_check: bool = True
+    has_drops: bool = False
+    winner_by: str = "checkmate"
+    tags: tuple[str, ...] = field(default_factory=tuple)
+
+    def __post_init__(self) -> None:
+        if not self.display_name:
+            object.__setattr__(self, "display_name", self.name or self.key.title())
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "key": self.key,
             "name": self.name,
+            "display_name": self.display_name,
             "description": self.description,
             "icon": self.icon,
             "supported_by_engine": self.supported_by_engine,
             "lichess_url": self.lichess_url,
+            "fen_includes_check": self.fen_includes_check,
+            "has_drops": self.has_drops,
+            "winner_by": self.winner_by,
+            "tags": list(self.tags),
         }
 
 

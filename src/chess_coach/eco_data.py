@@ -486,7 +486,7 @@ ECO_DATABASE: list[tuple[str, str, str]] = [
     ("E46", "Nimzo-Indian (4...O-O)", "d4 Nf6 c4 e6 Nc3 Bb4 e3 O-O"),
     ("E47", "Nimzo-Indian (5.Bd3)", "d4 Nf6 c4 e6 Nc3 Bb4 e3 O-O Bd3"),
     ("E48", "Nimzo-Indian (5...d5)", "d4 Nf6 c4 e6 Nc3 Bb4 e3 O-O Bd3 d5"),
-    ("E49", "Nimzo-Indian (5...c5 6.Nf3)", "d4 Nf6 c4 e6 Nc3 Bb4 e3 O-O Bd3 d5 a3 Bxc3 bxc3"),
+    ("E49", "Nimzo-Indian (5...c5 6.Nf3)", "d4 Nf6 c4 e6 Nc3 Bb4 e3 c5 Nf3"),
     ("E50", "Nimzo-Indian (4...O-O 5.Nf3)", "d4 Nf6 c4 e6 Nc3 Bb4 e3 O-O Nf3"),
     ("E51", "Nimzo-Indian (5...d5)", "d4 Nf6 c4 e6 Nc3 Bb4 e3 O-O Nf3 d5"),
     ("E52", "Nimzo-Indian (6...b6)", "d4 Nf6 c4 e6 Nc3 Bb4 e3 O-O Nf3 d5 Bd3 b6"),

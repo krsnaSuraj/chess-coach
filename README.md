@@ -9,7 +9,7 @@
 [![FastAPI](https://img.shields.io/badge/Web-FastAPI-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
 [![Stockfish](https://img.shields.io/badge/Engine-Stockfish_18-FF6600?logo=chess&logoColor=white)](https://stockfishchess.org)
 [![License](https://img.shields.io/badge/license-MIT-808080)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-630_passing-3fb950)](#-testing)
+[![Tests](https://img.shields.io/badge/tests-899_passing-3fb950)](#-testing)
 
 [Features](#-features) · [Quick Start](#-quick-start) · [Usage](#-usage) · [Configuration](#%EF%B8%8F-configuration) · [Architecture](#-architecture) · [Tech Stack](#-tech-stack)
 
@@ -25,14 +25,19 @@ It evaluates positions exclusively during **your turn**, detects blunders and mi
 
 ### v3.0 "The Humanizer" Highlights
 
-* **Multi-engine**: Stockfish 18 (depth-based) + Maia-1 (neural policy) running in parallel
-* **CAPS V2**: 8-tier move classification (Brilliant / Great / Best / Excellent / Good / Inaccuracy / Mistake / Blunder)
+* **Multi-engine**: Stockfish 18 + Maia-2 (neural policy) running in parallel, plus optional Berserk, Caissa, Crystal, Patricia, ShashChess
+* **CAPS V2**: 11-tier move classification — 9 visible (Brilliant / Great / Best / Excellent / Good / Inaccuracy / Mistake / Miss / Blunder) + Book + Forced
 * **5 personalities**: Aggressive, Positional, Tactical, Defensive, Balanced - each with its own move-bias dict and ECO preferences
 * **Anti-cheat risk score**: 0-100 with 7 chess.com-style signals (top-1 match, CPL, time variance, style, tactical, blunder freq, phase variance)
 * **Bayesian opponent modeler**: estimates opponent ELO and style from observed moves
 * **Motif detector**: pin, fork, skewer, discovered attack, deflection, decoy, back-rank, zwischenzug
+* **Lichess integration**: Explorer (Masters/Lichess/Player), Puzzles, OAuth PKCE, Study Sync, TV, Simuls, FIDE, Cloud Eval
+* **WebSocket live analysis**: FastAPI WS server streams eval/PV to web UI in real time
+* **4 tablebases**: Syzygy 7p, Lomonosov 7p, Lichess 8-piece (Op1), Gaviota
+* **8 variants**: Standard, Chess960, Atomic, Antichess, Horde, KOTH, Three-Check, Crazyhouse
+* **5 languages**: EN, HI, ES, FR, DE
+* **a11y**: 18 keyboard shortcuts, ARIA live region, WCAG 2.2 AA
 * **Graceful degradation**: works with Stockfish-only if Lc0/Maia are missing
-* **Desktop + Web UI**: 4 new v3.0 cards in the browser (CAPS, Motifs, Risk, ELO)
 
 **Perfect for:** Online chess (chess.com, lichess) where you play one side and want expert-level guidance without distraction.
 
@@ -41,7 +46,7 @@ It evaluates positions exclusively during **your turn**, detects blunders and mi
 | Interface | Use Case |
 |-----------|----------|
 | **Desktop GUI** (PyQt6) | Full-featured analysis with premium UI, glass sidebar, animated eval bar, piece slide animation, coach dashboard, move history |
-| **Web Interface** (FastAPI) | Lightweight browser access - play on PC, analyze on phone (same LAN) with 7 REST endpoints |
+| **Web Interface** (FastAPI) | Lightweight browser access - play on PC, analyze on phone (same LAN) with 24 REST endpoints + WebSocket |
 
 ---
 
@@ -290,61 +295,108 @@ graph TB
 ```
 chess-coach/
 │
-├── src/chess_coach/              # Python package
-│   ├── __init__.py               # Public API exports (85 symbols across 22 modules)
+├── src/chess_coach/              # Python package (127 files)
+│   ├── __init__.py               # Public API re-exports
 │   ├── __main__.py               # CLI entry: python -m chess_coach [web]
 │   ├── config.py                 # YAML loader, port probe, IP lookup
 │   ├── game_controller.py        # Shared game state, undo/redo, phases, cache
 │   ├── engine_handler.py         # Stockfish 18 UCI wrapper (QObject + QThread)
-│   ├── chess_board.py            # Board widget: drag-drop, highlights, arrows, 150ms animation
-│   ├── coach_dashboard.py        # Glass sidebar: animated eval bar, feedback, opening
+│   ├── chess_board.py            # Board widget: drag-drop, highlights, arrows
+│   ├── coach_dashboard.py        # Glass sidebar: animated eval bar, feedback
 │   ├── promotion_dialog.py       # Underpromotion choice dialog (Q/R/B/K)
-│   ├── main_window.py            # Wires board + dashboard + engine + menus + sounds
-│   ├── server.py                 # FastAPI web server, 7 REST endpoints, CORS
-│   ├── eco_handler.py            # ECO opening detection (longest-prefix match)
-│   ├── eco_data.py               # 509-entry ECO database (A00-E99, all covered)
-│   ├── sound_manager.py          # WAV generation + QSoundEffect playback
-│   ├── pgn_handler.py            # PGN export/import utilities
-│   ├── elo_calibrator.py         # Bayesian ELO estimator + 10 think profiles
-│   ├── personality.py            # 5 personality profiles + move bias
-│   ├── maia_engine.py            # Lc0 + Maia-1 wrapper (human policy)
+│   ├── main_window.py            # Wires board + dashboard + engine + menus
+│   ├── server.py                 # FastAPI web server, 24 REST endpoints + WebSocket
+│   ├── eco_handler.py            # ECO opening detection (longest-prefix)
+│   ├── eco_data.py               # 509-entry ECO database (A00-E99)
+│   ├── sound_manager.py          # WAV generation + QSoundEffect
+│   ├── pgn_handler.py            # PGN export/import
+│   ├── elo_calibrator.py         # Bayesian ELO estimator
+│   ├── personality.py            # 5 personality profiles
+│   ├── maia_engine.py            # Lc0 + Maia wrapper
 │   ├── caps.py                   # V2 Expected Points classifier
 │   ├── motif_detector.py         # 8 tactical pattern detectors
 │   ├── opponent_modeler.py       # Bayesian ELO + style classifier
 │   ├── anti_cheat_risk.py        # 7-signal risk scorer
 │   ├── humanizer.py              # Move selection + think time sim
-│   └── multi_engine_handler.py   # SF + Maia parallel orchestration
+│   ├── multi_engine_handler.py   # SF + Maia parallel orchestration
+│   │
+│   ├── engines/                  # 7 SOTA engines
+│   │   ├── base.py               # Engine interface + EngineInfo
+│   │   ├── stockfish.py          # Stockfish 18
+│   │   ├── lc0.py                # Leela Chess Zero
+│   │   ├── maia2.py              # Maia-2 (human policy)
+│   │   ├── berserk.py            # Berserk 3550 ELO
+│   │   ├── caissa.py             # Caissa 3500 ELO
+│   │   ├── crystal.py            # Crystal 3490 ELO
+│   │   ├── patricia.py           # Patricia 3520 ELO
+│   │   ├── shashchess.py         # ShashChess 3540 ELO
+│   │   └── multi_engine_pool.py  # Parallel aggregation
+│   │
+│   ├── tablebase/                # 4 tablebases
+│   │   ├── syzygy.py             # Syzygy 7-piece
+│   │   ├── lomonosov.py          # Lomonosov 7-piece
+│   │   ├── lichess_8p.py         # Lichess 8-piece (Op1)
+│   │   └── gaviota.py            # Gaviota fallback
+│   │
+│   ├── classify/                 # SOTA move classification
+│   │   ├── classify_v2.py        # 11 categories (9 visible + Book + Forced)
+│   │   ├── epd.py                # EPD-based scoring
+│   │   ├── phase_detector.py     # Opening/Middlegame/Endgame
+│   │   ├── brilliant.py          # Brilliant detector
+│   │   ├── great.py              # Great detector
+│   │   ├── miss.py               # Miss detector
+│   │   ├── motifs.py             # Tactical motifs
+│   │   └── report_card.py        # Accuracy report
+│   │
+│   ├── lichess/                  # 15+ Lichess API endpoints
+│   ├── ws/                       # WebSocket server/client
+│   ├── openings/                 # ECO + polyglot
+│   ├── coach/                    # Op prep, weakness, training plan
+│   ├── tournament/               # Arena, Swiss, Bracket
+│   ├── variants/                 # 8 variants registry
+│   ├── eval/                     # Glicko-2, CPL, perf rating
+│   ├── widgets/                  # 9 Qt widgets
+│   ├── a11y/                     # Screen reader, keyboard nav
+│   ├── i18n/                     # 5 languages
+│   ├── db/                       # PGN index (SQLite)
+│   └── theme_manager.py          # 10 themes
 │
-├── scripts/
-│   └── install_deps.py           # One-shot auto-installer for SF+Lc0+Maia
+├── scripts/                      # install_deps, audit_cruft, audit_new
 │
-├── tests/                        # 630 tests across 30 files with pytest
-│   ├── conftest.py
-│   ├── test_config.py            # Config loading, type validation, error handling
-│   ├── test_game_controller.py   # Board state, undo/redo, phases, transitions
-│   ├── test_eco.py               # ECO database integrity + opening detection (13 tests)
-│   ├── test_pgn_handler.py       # PGN export/import roundtrip (19 tests)
-│   ├── test_caps.py              # CAPS V2 classifier, EP thresholds, classifications
-│   ├── test_elo_calibrator.py    # 10 ELO bands, Bayesian estimator, think profiles
-│   ├── test_humanizer.py         # Move selection, oscillation penalty, think time
-│   ├── test_maia_engine.py       # Lc0/Maia wrappers, find_lc0, find_maia_weights
-│   ├── test_motif_detector.py    # 8 motif detectors (pins, forks, skewers, ...)
-│   ├── test_multi_engine_handler.py  # Parallel SF+Maia orchestration
-│   ├── test_opponent_modeler.py  # Bayesian ELO + style classification
-│   ├── test_anti_cheat_risk.py   # 7-signal risk scorer
-│   └── test_personality.py       # 5 personality profiles + move bias
+├── tests/                        # 899 tests across 34 test files
+│   ├── test_v3_sota_fixes.py     # SOTA regression tests
+│   ├── test_engines.py           # All 7 engines
+│   ├── test_tablebase.py         # 4 tablebases
+│   ├── test_classify_v2.py       # 11 categories (9 visible + Book + Forced)
+│   ├── test_lichess.py           # 15+ endpoints
+│   ├── test_ws.py                # WebSocket protocol
+│   ├── test_coach.py             # Op prep, weakness, training plan
+│   ├── test_variants.py          # 8 variants
+│   ├── test_widgets_v2.py        # 9 widgets
+│   ├── test_i18n.py              # 5 languages
+│   ├── test_a11y.py              # a11y modules
+│   ├── test_theme_manager.py     # 10 themes
+│   └── test_db.py                # PGN index
 │
-├── docs/
-│   ├── HUMANIZER.md              # 6-layer anti-detection philosophy
-│   ├── ARCHITECTURE_V3.md        # v3.0 module index + data flow
-│   └── MODELS.md                 # Lc0/Maia licensing + versions
+├── static/                       # Web frontend (PWA)
+│   ├── index.html                # 10 theme picker
+│   ├── manifest.json             # v3.0.0 PWA manifest
+│   ├── css/
+│   │   ├── themes.css            # 10 themes CSS vars
+│   │   └── chessboard.css        # Board grid + animation
+│   ├── js/
+│   │   ├── board.js              # ChessBoard class
+│   │   ├── app.js                # REST + WebSocket wiring
+│   │   ├── sound.js              # SoundEngine
+│   │   └── icons/                # PWA icons
+│   └── service-worker.js         # Offline cache
 │
-├── static/                       # Web frontend
+├── .github/workflows/ci.yml      # 3 OS × 3 Python matrix
 ├── screenshots/                  # App screenshots
 ├── config.yaml                   # Engine & humanizer settings
 ├── pyproject.toml                # Modern Python packaging (PEP 621)
 ├── requirements.txt              # Python dependencies
-├── ARCHITECTURE.md               # System architecture (this file)
+├── ARCHITECTURE.md               # Single source of truth
 ├── INSTALLATION.md               # Detailed setup guide
 ├── README.md                     # This file
 └── LICENSE                       # MIT License
@@ -364,9 +416,9 @@ chess-coach/
 | **Web Frontend** | chessboard.js + chess.js | Browser-based board interaction |
 | **Concurrency** | `threading` (RLock) + `QThread` | Non-blocking engine analysis, thread-safe state |
 | **Sound** | PyQt6.QtMultimedia (QSoundEffect) | Move click sound (auto-generated WAV) |
-| **AI/Detection** | ECO database (500 entries) | Opening name recognition via longest-prefix match |
+| **AI/Detection** | ECO database (509 entries) | Opening name recognition via longest-prefix match |
 | **Configuration** | PyYAML | `config.yaml` parsing with type validation |
-| **Testing** | pytest | 630 tests across 30 test files |
+| **Testing** | pytest | 899 tests across 34 test files (36 .py files incl. conftest + __init__) |
 
 ### SOTA Engines (v3.0+)
 
@@ -374,7 +426,7 @@ chess-coach/
 |-------|-----------|------|
 | **Multi-Engine Pool** | Stockfish 18 + Lc0 v0.32.2 + Maia-2 (optional) | Parallel engine aggregation with weight-based blending and auto-disable on failure |
 | **Syzygy Tablebase** | python-chess + Lichess API fallback | 7-piece endgame perfect play lookup (offline + online) |
-| **CAPS v2** | Engine-corrected SOTA classifier | 11 move categories (Brilliant, Great, Best, Excellent, Good, Inaccuracy, Mistake, Missed, Blunder, Book, Forced) with phase-aware grading |
+| **CAPS v2** | Engine-corrected SOTA classifier | 11 move categories (Brilliant, Great, Best, Excellent, Good, Inaccuracy, Mistake, Miss, Blunder, Book, Forced) with phase-aware grading |
 | **WebSocket Live** | FastAPI WebSocket + asyncio | Real-time eval stream to web UI with auto-reconnect and broadcast |
 | **Lichess API** | Opening Explorer + Puzzles + OAuth PKCE + Study Sync | 19 puzzle themes, 3 Explorer sources (Masters / Lichess / Player), PKCE-secured OAuth, NDJSON game streaming |
 | **Variants** | python-chess + custom engines | Standard, Chess960, Atomic, Antichess, Horde, KOTH, Three-Check, Crazyhouse |
@@ -386,7 +438,7 @@ chess-coach/
 ## 🧪 Testing
 
 ```bash
-pytest                  # Run all 630 tests
+pytest                  # Run all 899 tests
 pytest -v               # Verbose output
 pytest --cov=chess_coach # Coverage report
 ```
@@ -396,6 +448,14 @@ pytest --cov=chess_coach # Coverage report
 - **Game Controller**: Board state, human moves, undo/redo, phase transitions, SAN generation
 - **ECO**: Database integrity (no duplicates, valid codes), opening detection for 7+ named lines
 - **PGN Handler**: Export/import roundtrip, check symbols, game results, replay
+- **Engines**: SF18, Berserk, Caissa, Crystal, Patricia, ShashChess, Maia-2, Multi-Engine Pool
+- **Tablebase**: Syzygy 7p, Lomonosov 7p, Lichess 8p, Gaviota
+- **Classify V2**: 11 SOTA move categories with phase-aware grading
+- **Motif detector**: 8 tactical patterns (pin, fork, skewer, etc.)
+- **Lichess**: Explorer, Puzzles, OAuth PKCE, Study Sync, TV, Simuls, FIDE, Cloud Eval
+- **WebSocket**: protocol, server broadcast, client auto-reconnect
+- **Coach**: oprep, weakness, training plan
+- **Variants**: 8 variants, openings, polyglot, ECO
 
 ---
 

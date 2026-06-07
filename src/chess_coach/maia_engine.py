@@ -27,7 +27,6 @@ from __future__ import annotations
 
 import logging
 import os
-import shutil
 import subprocess
 from dataclasses import dataclass
 from typing import Optional

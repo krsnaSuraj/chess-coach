@@ -55,15 +55,16 @@ class TestThemesCSS:
     def themes_css(self) -> str:
         return (STATIC / "css" / "themes.css").read_text(encoding="utf-8")
 
-    def test_has_8_themes(self, themes_css):
+    def test_has_10_themes(self, themes_css):
         # Each theme is defined as html[data-theme="<name>"]
         themes = re.findall(r'html\[data-theme="(\w+)"\]', themes_css)
-        assert len(themes) == 8
+        assert len(themes) == 10
 
     def test_expected_theme_names(self, themes_css):
         themes = set(re.findall(r'html\[data-theme="(\w+)"\]', themes_css))
         assert themes == {"midnight", "forest", "sunset", "marble", "lichess",
-                          "blue_glass", "cyber_neon", "sepia"}
+                          "blue_glass", "cyber_neon", "sepia",
+                          "paper", "high_contrast"}
 
     def test_required_css_vars(self, themes_css):
         required = ("--board-light", "--board-dark", "--bg", "--accent",
@@ -237,3 +238,60 @@ class TestNoLegacyJQuery:
 
     def test_chessboard_js_gone(self):
         assert not (STATIC / "js" / "chessboard.js").exists()
+
+
+class TestStaticUrlRouting:
+    """Regression tests: static files must be served at /static/* URLs.
+
+    Bug fixed: app.mount('/', ...) caused /static/css/themes.css to 404.
+    Fix: app.mount('/static', ...) + explicit / route for index.html.
+    """
+
+    def test_static_css_url_works(self, tmp_path):
+        from fastapi import FastAPI
+        from fastapi.staticfiles import StaticFiles
+        from fastapi.testclient import TestClient
+        app = FastAPI()
+        app.mount("/static", StaticFiles(directory=str(STATIC)), name="static")
+
+        client = TestClient(app)
+        for path in (
+            "/static/css/themes.css",
+            "/static/css/chessboard.css",
+            "/static/js/app.js",
+            "/static/js/board.js",
+            "/static/js/sound.js",
+            "/static/manifest.json",
+            "/static/service-worker.js",
+            "/static/img/icon.svg",
+        ):
+            r = client.get(path)
+            assert r.status_code == 200, f"{path} returned {r.status_code}"
+
+    def test_index_route_returns_html(self):
+        from fastapi import FastAPI
+        from fastapi.responses import FileResponse
+        from fastapi.testclient import TestClient
+        app = FastAPI()
+
+        @app.get("/", include_in_schema=False)
+        async def index():
+            return FileResponse(str(STATIC / "index.html"))
+
+        client = TestClient(app)
+        r = client.get("/")
+        assert r.status_code == 200
+        assert "<html" in r.text.lower()
+
+    def test_server_mounts_at_static_not_root(self):
+        """Belt-and-braces: the actual server.py must mount at /static, not /."""
+        from pathlib import Path
+        srv = (Path(__file__).resolve().parent.parent / "src" / "chess_coach" / "server.py").read_text(encoding="utf-8")
+        assert 'app.mount("/static"' in srv, 'expected app.mount("/static", ...) in server.py'
+        assert 'app.mount("/", _NoCacheStaticFiles' not in srv, 'forbidden: app.mount("/", ...) in server.py'
+
+    def test_index_html_references_static_paths(self):
+        html = (STATIC / "index.html").read_text(encoding="utf-8")
+        assert '/static/css/themes.css' in html
+        assert '/static/css/chessboard.css' in html
+        assert '/static/js/app.js' in html

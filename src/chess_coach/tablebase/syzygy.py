@@ -57,7 +57,7 @@ class SyzygyProbe:
 
     def __init__(self, path: str | None = None, api_endpoint: str | None = None) -> None:
         self._path = Path(path) if path else None
-        self._api_endpoint = api_endpoint or "https://tablebase.lichess.ORG"
+        self._api_endpoint = api_endpoint or "https://tablebase.lichess.ovh"
         self._tablebase: Any = None
         self._open()
 
@@ -107,7 +107,6 @@ class SyzygyProbe:
             except Exception:  # noqa: BLE001
                 m_wdl, m_dtz = WDL_UNKNOWN, None
             board.pop()
-            from chess import Move  # type: ignore
 
             san = board.san(move)
             moves.append((san, m_wdl, int(m_dtz) if m_dtz is not None else 0))

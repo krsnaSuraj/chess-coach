@@ -21,7 +21,6 @@ import secrets
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 from urllib.parse import quote
 from urllib.request import Request, urlopen
 

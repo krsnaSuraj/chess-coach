@@ -34,8 +34,7 @@ from __future__ import annotations
 import logging
 import math
 import random
-from dataclasses import dataclass, field
-from typing import Optional
+from dataclasses import dataclass
 
 import chess
 
@@ -48,7 +47,6 @@ from chess_coach.personality import (
 from chess_coach.elo_calibrator import (
     get_think_time,
     phase_for_move_number,
-    get_acpl_target,
 )
 from chess_coach.maia_engine import MaiaEngine
 

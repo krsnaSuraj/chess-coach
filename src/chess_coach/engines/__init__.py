@@ -1,33 +1,39 @@
-"""Engine adapters for chess analysis.
+"""Engine adapters for the world's strongest open-source chess engines.
 
-SOTA 2026 engine pool:
-  - Stockfish 18 (NNUE + Threat Inputs)
-  - Berserk 13
-  - Caissa 1.22
-  - Crystal 9
-  - Patricia 4
-  - Viridithas 18
-  - ShashChess 38
-  - Koivisto 9.2
-  - RubiChess
-  - Lc0 0.32.2 (Leela Chess Zero)
-  - Maia-2 unified (NeurIPS 2024)
-
-All engines implement the `Engine` ABC (this/base.py).
+All engines are UCI-compliant. Each module exposes a small ABC subclass
+plus engine-specific UCI option presets.
 """
+from __future__ import annotations
 
-from chess_coach.engines.base import Engine, EngineInfo, Evaluation
-from chess_coach.engines.stockfish import Stockfish18Engine
-from chess_coach.engines.lc0 import Lc0Engine
-from chess_coach.engines.maia2 import Maia2Engine
-from chess_coach.engines.multi_engine_pool import MultiEnginePool
+from .base import Engine, EngineError, EngineInfo, Evaluation
+from .stockfish import SF18_NNUE_NAME, SF18_DEFAULT_OPTIONS, Stockfish18Engine, find_stockfish
+from .lc0 import Lc0Engine
+from .maia2 import Maia2Engine, deterministic_maia_choice
+from .berserk import BerserkEngine
+from .caissa import CaissaEngine
+from .crystal import CrystalEngine
+from .patricia import PatriciaEngine
+from .shashchess import ShashChessEngine
+from .multi_engine_pool import EngineWeight, MultiEnginePool, make_default_pool
 
 __all__ = [
     "Engine",
+    "EngineError",
     "EngineInfo",
     "Evaluation",
+    "SF18_NNUE_NAME",
+    "SF18_DEFAULT_OPTIONS",
     "Stockfish18Engine",
+    "find_stockfish",
     "Lc0Engine",
     "Maia2Engine",
+    "deterministic_maia_choice",
+    "BerserkEngine",
+    "CaissaEngine",
+    "CrystalEngine",
+    "PatriciaEngine",
+    "ShashChessEngine",
+    "EngineWeight",
     "MultiEnginePool",
+    "make_default_pool",
 ]

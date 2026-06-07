@@ -11,6 +11,7 @@ const PRECACHE = [
   '/static/js/board.js',
   '/static/js/app.js',
   '/static/manifest.json',
+  '/static/img/icon.svg',
 ];
 
 self.addEventListener('install', (event) => {
