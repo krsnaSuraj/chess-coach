@@ -1,0 +1,231 @@
+@import 'tailwindcss';
+
+/* ============================================================
+ *  Chess Coach v3.0.0 SOTA — design tokens
+ *  10 themes via CSS variables; one source of truth.
+ * ============================================================ */
+
+@theme {
+  --font-sans: 'Inter', 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Consolas', monospace;
+
+  --animate-eval-tween: 200ms cubic-bezier(0.33, 1, 0.68, 1);
+  --animate-pill-in: 200ms ease-out;
+}
+
+/* Default (midnight) — overridden per-theme below */
+:root,
+[data-theme='midnight'] {
+  --bg-0: #1a1d23;
+  --bg-1: #232830;
+  --bg-2: #2d333d;
+  --bg-3: #383f4b;
+  --fg-0: #e8eaed;
+  --fg-1: #b9bcc1;
+  --fg-2: #7a7f8a;
+  --accent: #769656;
+  --accent-2: #eeeed2;
+  --warn: #f0b232;
+  --error: #e84646;
+  --ok: #65b741;
+  --book: #9c8e6c;
+  --brilliant: #26c281;
+  --great: #5c9dff;
+  --best: #769656;
+  --excellent: #96bc4b;
+  --good: #b8b8b8;
+  --inaccuracy: #f0b232;
+  --mistake: #e58a2d;
+  --blunder: #e84646;
+  --miss: #b8456c;
+  --forced: #6c757d;
+}
+
+[data-theme='forest'] {
+  --bg-0: #0d1b16;
+  --bg-1: #14302a;
+  --bg-2: #1d4538;
+  --bg-3: #2a5c4a;
+  --fg-0: #e6f3ec;
+  --fg-1: #b3d4c5;
+  --fg-2: #6a8a7c;
+  --accent: #4caf50;
+  --accent-2: #c8e6c9;
+}
+
+[data-theme='sunset'] {
+  --bg-0: #1a0f1a;
+  --bg-1: #2b1a2b;
+  --bg-2: #3d243d;
+  --bg-3: #4f2e4f;
+  --fg-0: #fde2e2;
+  --fg-1: #d4b8c5;
+  --fg-2: #8a6a7a;
+  --accent: #ff6b6b;
+  --accent-2: #ffd166;
+}
+
+[data-theme='marble'] {
+  --bg-0: #f0e9d6;
+  --bg-1: #e6dec8;
+  --bg-2: #d4c8a8;
+  --bg-3: #c0b290;
+  --fg-0: #2b2b2b;
+  --fg-1: #4a4a4a;
+  --fg-2: #6e6e6e;
+  --accent: #6c4f2b;
+  --accent-2: #2b2b2b;
+}
+
+[data-theme='lichess'] {
+  --bg-0: #1a1a1a;
+  --bg-1: #262522;
+  --bg-2: #302e2b;
+  --bg-3: #3a3835;
+  --fg-0: #bababa;
+  --fg-1: #9a9a9a;
+  --fg-2: #686868;
+  --accent: #629924;
+  --accent-2: #d9d9d9;
+}
+
+[data-theme='blue_glass'] {
+  --bg-0: #0a1929;
+  --bg-1: #142a3f;
+  --bg-2: #1e3a55;
+  --bg-3: #284b6b;
+  --fg-0: #e0f0ff;
+  --fg-1: #a8c5e0;
+  --fg-2: #6a8aa8;
+  --accent: #5da6ff;
+  --accent-2: #cce4ff;
+}
+
+[data-theme='cyber_neon'] {
+  --bg-0: #050511;
+  --bg-1: #0a0a22;
+  --bg-2: #15123a;
+  --bg-3: #201b50;
+  --fg-0: #e0e6ff;
+  --fg-1: #a8b3e8;
+  --fg-2: #6a78b8;
+  --accent: #00f0ff;
+  --accent-2: #ff00aa;
+}
+
+[data-theme='sepia'] {
+  --bg-0: #f4ecd8;
+  --bg-1: #e8dcc0;
+  --bg-2: #d4c4a0;
+  --bg-3: #c0aa80;
+  --fg-0: #3b2a14;
+  --fg-1: #5a4528;
+  --fg-2: #7a5e3c;
+  --accent: #8b4513;
+  --accent-2: #3b2a14;
+}
+
+[data-theme='paper'] {
+  --bg-0: #fafaf7;
+  --bg-1: #f0efe8;
+  --bg-2: #e0ddd2;
+  --bg-3: #c8c4b4;
+  --fg-0: #1a1a1a;
+  --fg-1: #4a4a4a;
+  --fg-2: #7a7a7a;
+  --accent: #4a7ab0;
+  --accent-2: #1a1a1a;
+}
+
+[data-theme='high_contrast'] {
+  --bg-0: #000000;
+  --bg-1: #0a0a0a;
+  --bg-2: #1a1a1a;
+  --bg-3: #2a2a2a;
+  --fg-0: #ffffff;
+  --fg-1: #e0e0e0;
+  --fg-2: #a0a0a0;
+  --accent: #ffff00;
+  --accent-2: #00ffff;
+  --brilliant: #00ff88;
+  --great: #00ccff;
+  --blunder: #ff0066;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  background: var(--bg-0);
+  color: var(--fg-0);
+  font-family: var(--font-sans);
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* chessground overrides — board square colors come from data-theme */
+.cg-wrap {
+  background: var(--bg-2);
+}
+.cg-wrap cg-board square.light {
+  background-color: var(--accent-2);
+}
+.cg-wrap cg-board square.dark {
+  background-color: var(--accent);
+}
+.cg-wrap square.last-move {
+  background-color: rgba(255, 255, 100, 0.4);
+}
+.cg-wrap square.selected {
+  background-color: rgba(20, 85, 30, 0.5);
+}
+.cg-wrap square.move-dest {
+  background: radial-gradient(rgba(20, 85, 30, 0.5) 22%, transparent 22%);
+}
+.cg-wrap square.premove-dest {
+  background: radial-gradient(rgba(20, 30, 85, 0.5) 22%, transparent 22%);
+}
+.cg-wrap square.check {
+  background: radial-gradient(ellipse at center, rgba(255, 0, 0, 1) 0%, transparent 80%);
+}
+
+/* eval bar tween */
+.eval-bar-fill {
+  transition: height var(--animate-eval-tween);
+}
+
+/* move pill animations */
+.move-pill {
+  animation: pill-in var(--animate-pill-in);
+}
+@keyframes pill-in {
+  from { opacity: 0; transform: translateY(2px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* status dot pulse */
+.status-dot.connected {
+  background: var(--ok);
+  box-shadow: 0 0 6px var(--ok);
+}
+.status-dot.connecting {
+  background: var(--warn);
+  animation: pulse 1s ease-in-out infinite;
+}
+.status-dot.disconnected {
+  background: var(--error);
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+/* scrollbars */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: var(--bg-1); }
+::-webkit-scrollbar-thumb { background: var(--bg-3); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--fg-2); }

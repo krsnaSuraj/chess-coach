@@ -1,0 +1,15 @@
+{
+  "name": "chess-coach",
+  "version": "3.0.0",
+  "private": true,
+  "description": "Chess Coach v3.0.0 SOTA — offline-first chess trainer with on-device NER, FEFO dispensing, and Lichess-grade UI",
+  "scripts": {
+    "test": "python -m pytest -q",
+    "test:web": "pnpm --filter chess-coach-web test",
+    "check:web": "pnpm --filter chess-coach-web check",
+    "build:web": "pnpm --filter chess-coach-web build",
+    "dev:web": "pnpm --filter chess-coach-web dev",
+    "verify": "python -m pytest -q && pnpm --filter chess-coach-web check && pnpm --filter chess-coach-web test"
+  },
+  "packageManager": "pnpm@11.5.2"
+}

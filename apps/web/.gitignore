@@ -1,0 +1,10 @@
+node_modules/
+.svelte-kit/
+build/
+.vite/
+test-results/
+playwright-report/
+playwright/.cache/
+coverage/
+*.log
+.DS_Store

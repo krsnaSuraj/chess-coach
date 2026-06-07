@@ -158,4 +158,16 @@ logs/
 scratch/
 .tmp/
 
+# SvelteKit / pnpm workspace (apps/web)
+apps/web/node_modules/
+apps/web/.svelte-kit/
+apps/web/build/
+apps/web/.vite/
+apps/web/coverage/
+apps/web/test-results/
+apps/web/playwright-report/
+apps/web/playwright/.cache/
+node_modules/
+pnpm-lock.yaml
+
 
