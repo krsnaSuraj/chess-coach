@@ -88,3 +88,12 @@ class TestOpponentEntry:
         result = entry.parse_san("e4", board)
         assert result.is_valid is True
         assert result.move == chess.Move(chess.E2, chess.E4)
+
+
+class TestSideSelectorOpponentSide:
+    def test_get_opponent_side(self):
+        selector = SideSelector()
+        selector.select_side("w")
+        assert selector.get_opponent_side() == "b"
+        selector.select_side("b")
+        assert selector.get_opponent_side() == "w"

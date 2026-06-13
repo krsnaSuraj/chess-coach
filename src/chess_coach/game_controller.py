@@ -112,10 +112,12 @@ class GameController:
         return selection
 
     def enter_opponent_move(self, uci: str) -> dict:
+        if self.game_phase != GamePhase.PLAYING:
+            return {"success": False, "error": "Game not in progress"}
         result = self.opponent_entry.parse_move(uci, self.board)
         if not result.is_valid:
             return {"success": False, "error": result.error}
-        self.board.push(result.move)
+        self.record_move(result.move)
         is_user_turn = self.side_selector.is_user_turn(self.board)
         return {"success": True, "move": result.move.uci(), "is_user_turn": is_user_turn, "fen": self.board.fen()}
 
