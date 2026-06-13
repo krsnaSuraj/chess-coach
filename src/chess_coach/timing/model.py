@@ -56,7 +56,7 @@ class ThinkTimeModel:
     def _detect_phase(self, board: chess.Board, move_number: int) -> str:
         if move_number < 15:
             return "opening"
-        elif move_number < 35:
+        elif move_number <= 35:
             return "middlegame"
         else:
             return "endgame"

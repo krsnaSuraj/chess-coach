@@ -46,6 +46,7 @@ class TestThinkTimeModel:
         config = ThinkTimeConfig(rating=1500)
         model = ThinkTimeModel(config)
         board = chess.Board()
+        np.random.seed(42)
         think_time = model.calculate_think_time(board, remaining_time=600, move_number=20)
         assert 1.0 <= think_time <= 20.0
     
@@ -53,6 +54,7 @@ class TestThinkTimeModel:
         config = ThinkTimeConfig(rating=1500)
         model = ThinkTimeModel(config)
         board = chess.Board()
+        np.random.seed(42)
         think_time = model.calculate_think_time(board, remaining_time=20, move_number=20)
         assert think_time < 5.0
     
