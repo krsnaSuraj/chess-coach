@@ -47,7 +47,7 @@ class SessionTracker:
         mean_cv = np.mean([g.cv for g in games])
         if mean_cv < 0.2:
             return 0.9
-        return 0.2 + (mean_cv - 0.25) * 0.5
+        return max(0.0, min(1.0, 0.2 + (mean_cv - 0.25) * 0.5))
     
     def get_session_metrics(self) -> Optional[SessionMetrics]:
         if self.current_session is None or not self.current_session["games"]:

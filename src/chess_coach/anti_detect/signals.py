@@ -58,7 +58,7 @@ class SignalAnalyzer:
         for start in [0, 10, 30]:
             phase = self.move_history[start:start+10]
             if len(phase) < 5: continue
-            matches = sum(1 for i, mv in enumerate(phase) if i < len(self.engine_top_moves) and self.engine_top_moves[i] and mv == self.engine_top_moves[i][0])
+            matches = sum(1 for i, mv in enumerate(phase) if start+i < len(self.engine_top_moves) and self.engine_top_moves[start+i] and mv == self.engine_top_moves[start+i][0])
             phase_accuracies.append(matches / len(phase))
         if len(phase_accuracies) < 2:
             return SignalResult("style_consistency", 0.0, 0.10, 0.0)
@@ -93,10 +93,12 @@ class SignalAnalyzer:
     def phase_conditional_accuracy(self) -> SignalResult:
         if len(self.move_history) < 30:
             return SignalResult("phase_accuracy", 0.0, 0.07, 0.0)
+        phases = [(0, 15), (15, 35), (35, len(self.move_history))]
         accuracies = []
-        for phase in [self.move_history[:15], self.move_history[15:35], self.move_history[35:]]:
+        for start, end in phases:
+            phase = self.move_history[start:end]
             if len(phase) < 5: continue
-            matches = sum(1 for i, mv in enumerate(phase) if i < len(self.engine_top_moves) and self.engine_top_moves[i] and mv == self.engine_top_moves[i][0])
+            matches = sum(1 for i, mv in enumerate(phase) if start+i < len(self.engine_top_moves) and self.engine_top_moves[start+i] and mv == self.engine_top_moves[start+i][0])
             accuracies.append(matches / len(phase))
         if len(accuracies) < 2:
             return SignalResult("phase_accuracy", 0.0, 0.07, 0.0)
