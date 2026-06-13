@@ -1,5 +1,5 @@
 engine:
-  path: "stockfish.exe"
+  path: "stockfish/stockfish-windows-x86-64-avx2.exe"
   threads: 2
   hash: 64
   movetime: 2000
@@ -43,3 +43,29 @@ humanizer:
   # Realistic think-time simulation
   simulated_think_time: true
   time_pressure_threshold: 30.0  # seconds; below this boosts temperature
+
+# Nova engine — pure policy, ONNX-based, 35ms inference
+nova:
+  enabled: true
+  model_dir: "engines/nova"
+  auto_download: true
+  rating: 1500
+  classical: 0.5
+  aggression: 0.5
+  temperature: 0.5
+
+# Timing simulation — ChessMimic
+timing:
+  enabled: true
+  fatigue_enabled: true
+  hesitation_enabled: true
+  min_time: 0.5
+  max_time_ratio: 0.3
+
+# Anti-detection — 12 signals + ML classifier
+anti_detect:
+  enabled: true
+  ml_classifier: true
+  session_tracking: true
+  risk_threshold_warning: 65
+  risk_threshold_critical: 80
