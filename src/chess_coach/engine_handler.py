@@ -8,6 +8,7 @@ import chess.engine
 from PyQt6.QtCore import QThread, pyqtSignal, QObject
 
 from chess_coach.multi_engine_handler import MultiEngineHandler
+from chess_coach.engines.nova import NovaEngine, NovaConfig
 
 logger = logging.getLogger(__name__)
 
@@ -30,12 +31,29 @@ class EngineHandler(QObject):
     def __init__(self, config: dict, enable_maia: bool = False) -> None:
         super().__init__()
         self.config = config
-        self.engine_path: str = config.get("engine", {}).get("path", "stockfish.exe")
+        self.engine_path: str = self._resolve_engine_path(config)
         self.engine: chess.engine.SimpleEngine | None = None
         self.analysis_thread: AnalysisThread | None = None
         self.pending_board: chess.Board | None = None
         self._multi: MultiEngineHandler | None = None
         self._enable_maia = enable_maia
+        self._nova: NovaEngine | None = None
+
+    def _resolve_engine_path(self, config: dict) -> str:
+        """Resolve engine path with auto-detection for bundled stockfish."""
+        from pathlib import Path
+        # 1. Explicit config path
+        configured = config.get("engine", {}).get("path")
+        if configured:
+            return configured
+        # 2. Bundled stockfish (stockfish/stockfish-windows-x86-64-avx2.exe)
+        here = Path(__file__).resolve().parent
+        project_root = here.parent.parent
+        bundled = project_root / "stockfish" / "stockfish-windows-x86-64-avx2.exe"
+        if bundled.is_file():
+            return str(bundled)
+        # 3. Fallback to stockfish.exe (PATH or local)
+        return "stockfish.exe"
 
     def _ensure_engine_alive(self) -> bool:
         if self.engine is None:
@@ -145,6 +163,19 @@ class EngineHandler(QObject):
     def stop_analysis(self) -> None:
         self.pending_board = None
         self._stop_current_thread_async()
+
+    def get_nova_move(self, board: chess.Board, rating: int = 1500) -> chess.Move:
+        """Get move from Nova engine."""
+        if self._nova is None:
+            self._nova = NovaEngine(NovaConfig())
+        return self._nova.get_move(board, rating=rating)
+
+    def get_nova_top_moves(self, board: chess.Board, n: int = 3,
+                           rating: int = 1500) -> list[tuple[chess.Move, float]]:
+        """Get top N moves from Nova engine."""
+        if self._nova is None:
+            self._nova = NovaEngine(NovaConfig())
+        return self._nova.get_top_moves(board, n=n, rating=rating)
 
     def _stop_current_thread_async(self) -> None:
         if self.analysis_thread:

@@ -14,6 +14,7 @@ from .caissa import CaissaEngine
 from .crystal import CrystalEngine
 from .patricia import PatriciaEngine
 from .shashchess import ShashChessEngine
+from .nova import NovaEngine, NovaConfig
 from .multi_engine_pool import EngineWeight, MultiEnginePool, make_default_pool
 
 __all__ = [
@@ -33,6 +34,8 @@ __all__ = [
     "CrystalEngine",
     "PatriciaEngine",
     "ShashChessEngine",
+    "NovaEngine",
+    "NovaConfig",
     "EngineWeight",
     "MultiEnginePool",
     "make_default_pool",
