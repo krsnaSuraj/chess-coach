@@ -21,6 +21,66 @@ from chess_coach.ws.protocol import WsMessage, MessageType
 
 logger = logging.getLogger(__name__)
 
+games: dict[Any, Any] = {}
+
+
+async def handle_set_side(websocket: Any, data: dict) -> None:
+    """Handle side selection."""
+    game = games.get(websocket)
+    if game:
+        game.select_side(
+            side=data.get("side", "w"),
+            rating=data.get("rating", 1500),
+            classical=data.get("classical", 0.5),
+            aggression=data.get("aggression", 0.5),
+        )
+        await websocket.send_json({
+            "type": "side_selected",
+            "side": data.get("side", "w"),
+        })
+
+
+async def handle_opponent_move(websocket: Any, data: dict) -> None:
+    """Handle opponent move entry."""
+    game = games.get(websocket)
+    if game:
+        result = game.enter_opponent_move(data.get("uci", ""))
+        if result["success"]:
+            best_move = game.get_best_move()
+            import asyncio
+            await asyncio.sleep(best_move.get("think_time", 2.0))
+            await websocket.send_json({
+                "type": "best_move",
+                "uci": best_move["move"],
+                "eval": 0.0,
+                "depth": 20,
+                "think_time": best_move["think_time"],
+            })
+            arrows = []
+            for move_uci, prob in best_move.get("top_moves", []):
+                from_sq = move_uci[:2]
+                to_sq = move_uci[2:4]
+                arrows.append({
+                    "from": from_sq,
+                    "to": to_sq,
+                    "color": "green" if prob > 0.5 else "yellow",
+                })
+            await websocket.send_json({
+                "type": "arrow_update",
+                "arrows": arrows,
+            })
+            await websocket.send_json({
+                "type": "risk_assessment",
+                "score": best_move.get("risk_score", 0),
+                "level": best_move.get("risk_level", "SAFE"),
+                "recommendation": "",
+            })
+        else:
+            await websocket.send_json({
+                "type": "error",
+                "message": result.get("error", "Invalid move"),
+            })
+
 
 class WsBroadcaster:
     """Maintains connected WebSocket clients and broadcasts messages."""
@@ -89,6 +149,10 @@ def attach_websocket(app: Any, path: str = "/ws") -> WsBroadcaster:
                 if msg.type.value == "ping":
                     pong = WsMessage(type=MessageType("pong"), data=msg.data)
                     await websocket.send_text(pong.to_json())
+                elif msg.type.value == "set_side":
+                    await handle_set_side(websocket, msg.data)
+                elif msg.type.value == "opponent_move":
+                    await handle_opponent_move(websocket, msg.data)
         except WebSocketDisconnect:
             pass
         finally:

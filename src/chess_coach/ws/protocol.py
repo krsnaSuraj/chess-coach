@@ -25,6 +25,12 @@ class MessageType(str, enum.Enum):
     HELLO = "hello"
     PING = "ping"
     PONG = "pong"
+    SET_SIDE = "set_side"
+    OPPONENT_MOVE = "opponent_move"
+    BEST_MOVE = "best_move"
+    ARROW_UPDATE = "arrow_update"
+    RISK_ASSESSMENT = "risk_assessment"
+    SIDE_SELECTED = "side_selected"
 
 
 @dataclass
@@ -134,3 +140,41 @@ class SoundEvent:
 
     def to_message(self) -> WsMessage:
         return WsMessage(type=MessageType.SOUND, data=asdict(self))
+
+
+@dataclass
+class SetSideMessage:
+    type: str = "set_side"
+    side: str = "w"
+    rating: int = 1500
+    classical: float = 0.5
+    aggression: float = 0.5
+
+
+@dataclass
+class OpponentMoveMessage:
+    type: str = "opponent_move"
+    uci: str = ""
+
+
+@dataclass
+class BestMoveMessage:
+    type: str = "best_move"
+    uci: str = ""
+    eval: float = 0.0
+    depth: int = 0
+    think_time: float = 0.0
+
+
+@dataclass
+class ArrowUpdateMessage:
+    type: str = "arrow_update"
+    arrows: list = field(default_factory=list)
+
+
+@dataclass
+class RiskAssessmentMessage:
+    type: str = "risk_assessment"
+    score: int = 0
+    level: str = "SAFE"
+    recommendation: str = ""
