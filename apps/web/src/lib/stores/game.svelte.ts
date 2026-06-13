@@ -34,6 +34,13 @@ export class GameStore {
   orientation = $state<'white' | 'black'>('white');
   error = $state<string | null>(null);
   loading = $state(false);
+
+  // Coach mode state
+  selectedSide: string | null = $state(null);
+  isUserTurn: boolean = $state(true);
+  riskScore: number = $state(0);
+  riskLevel: string = $state('SAFE');
+
   // Stashed entry popped by undo so a subsequent redo can restore it.
   // Cleared on newGame, on a fresh playMove, and on undo of a redo'd move.
   private _pendingRedo: HistoryEntry | null = null;
@@ -80,13 +87,30 @@ export class GameStore {
     }
   }
 
-  async newGame(humanIsWhite = true) {
+  async newGame(humanIsWhite = true, mode: 'play_vs_engine' | 'assistant' = 'play_vs_engine') {
     this.history = [];
     this.cursor = -1;
     this._pendingRedo = null;
-    const s = await api.startGame(humanIsWhite);
+    const s = await api.startGame(humanIsWhite, mode);
     this.state = s;
     this.error = s.error;
+    // If engine auto-played a move (play_vs_engine mode, human is black), record it
+    if (s.move && mode === 'play_vs_engine') {
+      const c = new Chess('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1');
+      const m = c.move({ from: s.move.slice(0, 2), to: s.move.slice(2, 4) });
+      const san = m ? m.san : s.move;
+      this.history.push({
+        ply: 1,
+        san,
+        uci: s.move,
+        fen_before: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+        fen_after: this.state!.fen,
+        eval_cp: 0,
+        classification: 'BOOK',
+        cpl: 0,
+        played_by: 'engine'
+      });
+    }
   }
 
   /**
@@ -140,6 +164,27 @@ export class GameStore {
         played_by: 'human'
       };
       this.history = [...this.history, humanEntry];
+
+      // If engine auto-played a reply, record it in history
+      if (res.move) {
+        const engineMove = res.move;
+        const tempBoard = new Chess(fenAfterHuman);
+        const mv = tempBoard.move(engineMove);
+        const engineSan = mv ? mv.san : engineMove;
+        const fenAfterEngine = res.fen;
+        this.history.push({
+          ply: this.history.length + 1,
+          san: engineSan,
+          uci: engineMove,
+          fen_before: fenAfterHuman,
+          fen_after: fenAfterEngine,
+          eval_cp: newEval,
+          classification: 'BOOK',
+          cpl: 0,
+          played_by: 'engine'
+        });
+      }
+
       this._pendingRedo = null;
       this.cursor = -1;
       return true;
@@ -187,6 +232,24 @@ export class GameStore {
   goToEnd() { this.cursor = this.history.length - 1; }
   stepBack() { if (this.cursor > -1) this.cursor -= 1; }
   stepForward() { if (this.cursor < this.history.length - 1) this.cursor += 1; }
+
+  setSide(side: string) {
+    this.selectedSide = side;
+    this.isUserTurn = side === 'w';
+  }
+
+  enterOpponentMove() {
+    this.isUserTurn = false;
+  }
+
+  receiveBestMove() {
+    this.isUserTurn = true;
+  }
+
+  updateRisk(score: number, level: string) {
+    this.riskScore = score;
+    this.riskLevel = level;
+  }
 
   classificationAt(ply: number): MoveClass {
     return this.history[ply]?.classification ?? 'GOOD';

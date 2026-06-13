@@ -38,6 +38,12 @@ export class WsConnection {
     this.state = 'idle';
   }
 
+  send(data: Record<string, unknown>) {
+    if (this.#socket?.readyState === WebSocket.OPEN) {
+      this.#socket.send(JSON.stringify({ v: 1, ts: Date.now(), ...data }));
+    }
+  }
+
   onMessage(fn: (m: WsEnvelope) => void) {
     this.#handlers.add(fn);
     return () => this.#handlers.delete(fn);

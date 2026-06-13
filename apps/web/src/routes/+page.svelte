@@ -26,6 +26,8 @@
   import { EvalStore } from '$lib/stores/eval.svelte';
   import { WsConnection } from '$lib/stores/ws.svelte';
   import { SettingsStore } from '$lib/stores/settings.svelte';
+  import SideSelect from '$lib/components/SideSelect.svelte';
+  import OpponentEntry from '$lib/components/OpponentEntry.svelte';
   import type { WsAnalysisUpdate, WsEnvelope } from '$lib/types';
 
   const game = new GameStore();
@@ -64,6 +66,32 @@
         else if (upd.classification === 'BRILLIANT') lastSoundKind = 'promote';
         else if (upd.classification === 'GREAT') lastSoundKind = 'castle';
         else lastSoundKind = 'move';
+      }
+    });
+    return off;
+  });
+
+  // Coach mode handlers
+  function handleSideSelect(event: CustomEvent<{side: string; rating: number; classical: number; aggression: number}>) {
+    const { side, rating, classical, aggression } = event.detail;
+    ws.send({ type: 'set_side', side, rating, classical, aggression });
+  }
+
+  function handleOpponentMove(event: CustomEvent<{uci: string}>) {
+    const { uci } = event.detail;
+    ws.send({ type: 'opponent_move', uci });
+    game.enterOpponentMove();
+  }
+
+  // Handle coach WS messages
+  $effect(() => {
+    const off = ws.onMessage((msg: WsEnvelope) => {
+      if (msg.type === 'side_selected') {
+        game.setSide((msg as any).side);
+      } else if (msg.type === 'best_move') {
+        game.receiveBestMove();
+      } else if (msg.type === 'risk_assessment') {
+        game.updateRisk((msg as any).score, (msg as any).level);
       }
     });
     return off;
@@ -175,6 +203,10 @@
 </svelte:head>
 
 <main class="app" data-theme={settings.data.theme}>
+  {#if !game.selectedSide}
+    <SideSelect on:select={handleSideSelect} />
+  {/if}
+
   <StatusBar
     {ws}
     {evalStore}
@@ -214,6 +246,16 @@
       </section>
     </aside>
   </div>
+
+  {#if game.selectedSide && !game.isUserTurn}
+    <OpponentEntry on:move={handleOpponentMove} />
+  {/if}
+
+  {#if game.selectedSide}
+    <div class="risk-indicator" class:risky={game.riskLevel !== 'SAFE'}>
+      Risk: {game.riskLevel} ({game.riskScore})
+    </div>
+  {/if}
 
   <div class="bottom">
     <AccuracyGraph {evalStore} visible={settings.data.showAccuracyGraph} />
@@ -276,9 +318,8 @@
     min-height: 0;
   }
   .board-wrap {
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    display: grid;
+    place-items: center;
     min-width: 0;
     min-height: 0;
   }
@@ -324,6 +365,19 @@
   }
   .hint { color: var(--fg-2); }
   .status { color: var(--fg-1); }
+  .risk-indicator {
+    text-align: center;
+    padding: 0.5rem;
+    margin: 1rem;
+    background: rgba(76, 175, 80, 0.15);
+    border-radius: 4px;
+    font-size: 0.875rem;
+    color: #4caf50;
+  }
+  .risk-indicator.risky {
+    background: rgba(244, 67, 54, 0.15);
+    color: #f44336;
+  }
 
   /* responsive: hide right panel on narrow screens, keep moves+explorer stack */
   @media (max-width: 900px) {
