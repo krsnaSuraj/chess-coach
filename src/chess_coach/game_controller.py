@@ -5,6 +5,9 @@ from enum import Enum
 
 import chess
 
+from chess_coach.coach import SideSelector, OpponentEntry
+from chess_coach.engines.nova import NovaEngine, NovaConfig
+
 
 class GamePhase(Enum):
     AWAITING_COLOR = "awaiting_color"
@@ -22,6 +25,9 @@ class GameController:
         self.redo_stack: list[chess.Move] = []
         self.cached_coach: dict | None = None
         self.cached_fen: str | None = None
+        self.side_selector = SideSelector()
+        self.opponent_entry = OpponentEntry()
+        self.nova_engine = None
 
     def start_game(self, human_is_white: bool) -> None:
         with self.lock:
@@ -99,3 +105,23 @@ class GameController:
                 self.game_phase == GamePhase.PLAYING
                 and self.board.turn == self.human_side
             )
+
+    def select_side(self, side: str, rating: int = 1500, classical: float = 0.5, aggression: float = 0.5):
+        selection = self.side_selector.select_side(side, rating, classical, aggression)
+        self.nova_engine = NovaEngine(NovaConfig(rating=rating, classical=classical, aggression=aggression))
+        return selection
+
+    def enter_opponent_move(self, uci: str) -> dict:
+        result = self.opponent_entry.parse_move(uci, self.board)
+        if not result.is_valid:
+            return {"success": False, "error": result.error}
+        self.board.push(result.move)
+        is_user_turn = self.side_selector.is_user_turn(self.board)
+        return {"success": True, "move": result.move.uci(), "is_user_turn": is_user_turn, "fen": self.board.fen()}
+
+    def get_best_move(self) -> dict:
+        if self.nova_engine is None:
+            return {"success": False, "error": "Side not selected"}
+        move = self.nova_engine.get_move(self.board)
+        top_moves = self.nova_engine.get_top_moves(self.board, n=3)
+        return {"success": True, "move": move.uci(), "top_moves": [(m.uci(), p) for m, p in top_moves]}
