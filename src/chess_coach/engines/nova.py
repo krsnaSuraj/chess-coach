@@ -101,7 +101,7 @@ class NovaEngine:
         promo = None
         raw = int(idx)
         if raw >= 4096 * 3:
-            promo = chess.ROOK
+            promo = chess.QUEEN
             raw -= 4096 * 3
         elif raw >= 4096 * 2:
             promo = chess.BISHOP
@@ -147,13 +147,15 @@ class NovaEngine:
             elif mv.promotion == chess.BISHOP:
                 idx += 4096 * 2
             elif mv.promotion == chess.ROOK:
+                continue
+            elif mv.promotion == chess.QUEEN:
                 idx += 4096 * 3
             legal_mask[idx] = True
         
         masked = np.where(legal_mask, logits, -1e9)
         
         # Temperature sampling
-        probs = np.exp(masked - masked.max()) / temperature
+        probs = np.exp((masked - masked.max()) / temperature)
         probs *= legal_mask
         probs /= probs.sum()
         
@@ -188,6 +190,8 @@ class NovaEngine:
             elif mv.promotion == chess.BISHOP:
                 idx += 4096 * 2
             elif mv.promotion == chess.ROOK:
+                continue
+            elif mv.promotion == chess.QUEEN:
                 idx += 4096 * 3
             legal_mask[idx] = True
         

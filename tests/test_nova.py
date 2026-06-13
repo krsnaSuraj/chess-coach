@@ -63,6 +63,22 @@ class TestNovaMoveDecoding:
         assert move.to_square == chess.A8
         assert move.promotion == chess.KNIGHT
 
+    def test_decode_queen_promotion(self):
+        engine = NovaEngine.__new__(NovaEngine)
+        # a7=48, a8=56 -> 12288 + 48*64+56 = 15416
+        move = engine.decode_move_idx(15416)
+        assert move.from_square == chess.A7
+        assert move.to_square == chess.A8
+        assert move.promotion == chess.QUEEN
+
+    def test_decode_bishop_promotion(self):
+        engine = NovaEngine.__new__(NovaEngine)
+        # a7=48, a8=56 -> 8192 + 48*64+56 = 11320
+        move = engine.decode_move_idx(11320)
+        assert move.from_square == chess.A7
+        assert move.to_square == chess.A8
+        assert move.promotion == chess.BISHOP
+
 
 class TestNovaEngine:
     @patch("chess_coach.engines.nova.NovaEngine._ensure_model")
