@@ -117,7 +117,7 @@ def _classify_move(board: chess.Board, move: chess.Move, ply: int) -> tuple[str,
     if piece.piece_type == chess.PAWN:
         if to_sq in CENTER:
             return "advance pawn to center", target
-        if board.is_passed_pawn(to_sq) and not board.is_capture(move):
+        if _is_passed_pawn(board, to_sq, piece.color) and not board.is_capture(move):
             return "push passed pawn", target
         return "pawn advance", target
 
@@ -136,9 +136,9 @@ def _classify_move(board: chess.Board, move: chess.Move, ply: int) -> tuple[str,
     # Rook
     if piece.piece_type == chess.ROOK:
         rank = chess.square_rank(to_sq)
-        if rank == 6 and not piece.color:  # 7th rank for white
+        if rank == 6 and piece.color:  # 7th rank for white
             return "occupy 7th rank", target
-        if rank == 1 and not piece.color:
+        if rank == 1 and not piece.color:  # 7th rank for black
             return "occupy 7th rank", target
         if to_sq in (chess.A1, chess.H1, chess.A8, chess.H8):
             return "rook to back rank", target
@@ -153,6 +153,22 @@ def _classify_move(board: chess.Board, move: chess.Move, ply: int) -> tuple[str,
         return "king move", target
 
     return "reposition", target
+
+
+def _is_passed_pawn(board: chess.Board, square: int, color: chess.Color) -> bool:
+    """Check if a pawn on the given square is a passed pawn."""
+    pawn_file = chess.square_file(square)
+    pawn_rank = chess.square_rank(square)
+    forward_dir = 1 if color == chess.WHITE else -1
+    # Check squares in front of pawn on same file and adjacent files
+    for f in [pawn_file - 1, pawn_file, pawn_file + 1]:
+        if 0 <= f <= 7:
+            for r in range(pawn_rank + forward_dir, 8 if color == chess.WHITE else -1, forward_dir):
+                sq = chess.square(f, r)
+                p = board.piece_at(sq)
+                if p and p.piece_type == chess.PAWN and p.color != color:
+                    return False
+    return True
 
 
 def _theme_of(intent: str) -> str:

@@ -165,7 +165,6 @@ def make_opening_line(name: str, color: chess.Color, san_moves: Sequence[str], e
 
 def _extract_san_from_pgn(pgn_text: str) -> list[str]:
     """Extract SAN moves from PGN text like '1.e4 c5 2.Nf3 d6 3...'."""
-    import re
     out: list[str] = []
     for token in pgn_text.split():
         # Strip leading move-number markers like "1." or "1..."

@@ -27,7 +27,7 @@ class GameController:
         self.cached_fen: str | None = None
         self.side_selector = SideSelector()
         self.opponent_entry = OpponentEntry()
-        self.nova_engine = None
+        self.nova_engine: NovaEngine | None = None
 
     def start_game(self, human_is_white: bool) -> None:
         with self.lock:

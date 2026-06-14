@@ -47,14 +47,14 @@ async def handle_opponent_move(websocket: Any, data: dict) -> None:
         result = game.enter_opponent_move(data.get("uci", ""))
         if result["success"]:
             best_move = game.get_best_move()
-            import asyncio
-            await asyncio.sleep(best_move.get("think_time", 2.0))
+            think_time = best_move.get("think_time", 2.0)
+            await asyncio.sleep(think_time)
             await websocket.send_json({
                 "type": "best_move",
                 "uci": best_move["move"],
                 "eval": 0.0,
                 "depth": 20,
-                "think_time": best_move["think_time"],
+                "think_time": think_time,
             })
             arrows = []
             for move_uci, prob in best_move.get("top_moves", []):
