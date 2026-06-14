@@ -44,3 +44,9 @@ htmlcov/
 
 # Logs
 *.log
+
+# Command Code
+.commandcode/
+
+# Screenshots
+screenshots/

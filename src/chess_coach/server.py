@@ -16,6 +16,7 @@ from starlette.responses import Response
 
 from chess_coach.game_controller import GameController, GamePhase
 from chess_coach.config import load_config
+from chess_coach.humanizer import Humanizer, ComplexityDetector
 
 logger = logging.getLogger(__name__)
 
@@ -28,8 +29,10 @@ except Exception:
 config = _cfg
 ENGINE_PATH = config.get("engine", {}).get("path", "stockfish.exe")
 WEB_MOVETIME = config.get("engine", {}).get("web_movetime", 0.15)
+MULTIPV = config.get("engine", {}).get("multipv", 5)
 
 game_controller = GameController()
+_humanizer = Humanizer(config)
 
 _engine: chess.engine.SimpleEngine | None = None
 _engine_lock = threading.Lock()
@@ -115,6 +118,8 @@ def health_check() -> dict:
 def start_game(request: StartGameRequest) -> UnifiedResponse:
     try:
         game_controller.start_game(request.human_is_white)
+        _humanizer.new_game()
+        _humanizer._web_result_recorded = False
         return _build_response()
     except Exception as e:
         return _error_response(str(e))
@@ -168,7 +173,19 @@ def _build_response() -> UnifiedResponse:
     with game_controller.lock:
         mode = "idle"
         if game_controller.game_phase == GamePhase.PLAYING:
-            mode = "coach"
+            if game_controller.board.is_game_over() or game_controller.board.is_fifty_moves() or game_controller.board.can_claim_draw():
+                mode = "idle"
+                if not getattr(_humanizer, "_web_result_recorded", False):
+                    if game_controller.board.is_checkmate():
+                        won = game_controller.board.turn != game_controller.human_side
+                        result = "win" if won else "loss"
+                    else:
+                        result = "draw"
+                    from chess_coach.humanizer import _accuracy_for_elo
+                    _humanizer.record_result(result, _accuracy_for_elo(_humanizer.effective_elo))
+                    _humanizer._web_result_recorded = True
+            else:
+                mode = "coach"
         fen = game_controller.board.fen()
         is_human_turn = (
             mode == "coach"
@@ -200,14 +217,29 @@ def _run_coach_analysis_safe() -> dict | None:
     try:
         with game_controller.lock:
             board_snapshot = game_controller.board.copy()
-        info = eng.analyse(board_snapshot, chess.engine.Limit(time=WEB_MOVETIME))
-        score = info.get("score")
+        multi = eng.analyse(
+            board_snapshot,
+            chess.engine.Limit(time=WEB_MOVETIME),
+            multipv=MULTIPV,
+        )
+        if isinstance(multi, dict):
+            multi = [multi]
+
+        is_complex = ComplexityDetector.is_complex(board_snapshot)
+        best = multi[0]
+        eval_score = 0.0
+        score = best.get("score")
+        if score:
+            eval_score = abs(score.relative.score(mate_score=10000)) / 100.0
+        human_move = _humanizer.select_move(
+            multi, board_snapshot, is_complex=is_complex, eval_score=eval_score,
+        )
         if score is None:
             return None
 
         cp = score.relative.score(mate_score=10000)
         mate = score.relative.mate()
-        depth = info.get("depth", 0)
+        depth = best.get("depth", 0)
 
         if mate is not None:
             eval_text = f"M{abs(mate)}"
@@ -217,8 +249,8 @@ def _run_coach_analysis_safe() -> dict | None:
             if cp > 0:
                 eval_text = "+" + eval_text
 
-        pv = info.get("pv", [])
-        best_move = pv[0].uci() if pv else None
+        pv = best.get("pv", [])
+        best_move = human_move.uci() if human_move else (pv[0].uci() if pv else None)
 
         return {
             "best_move": best_move,

@@ -1,4 +1,4 @@
-"""Chess Coach — Real-time chess analysis sidekick.
+"""Chess Coach v1.0.0 — Real-time chess analysis sidekick.
 
 Usage:
   python -m chess_coach          Desktop GUI mode

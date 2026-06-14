@@ -130,7 +130,8 @@ class AnalysisThread(QThread):
 
     def run(self) -> None:
         try:
-            with self.engine.analysis(self.board) as analysis:
+            multipv = self.config.get("engine", {}).get("multipv", 5)
+            with self.engine.analysis(self.board, multipv=multipv) as analysis:
                 for info in analysis:
                     if not self.is_running:
                         break

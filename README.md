@@ -1,371 +1,215 @@
-<div align="center">
+# Chess Coach v1.0.0
 
-# ♟️ Chess Coach
-
-**Professional real-time chess analysis sidekick · Desktop GUI & Web Interface**
-
-[![Python](https://img.shields.io/badge/Python-3.10+-blue?logo=python&logoColor=white)](https://python.org)
-[![PyQt6](https://img.shields.io/badge/GUI-PyQt6-41CD52?logo=qt&logoColor=white)](https://www.riverbankcomputing.com/software/pyqt/)
-[![FastAPI](https://img.shields.io/badge/Web-FastAPI-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
-[![Stockfish](https://img.shields.io/badge/Engine-Stockfish_18-FF6600?logo=chess&logoColor=white)](https://stockfishchess.org)
-[![License](https://img.shields.io/badge/license-MIT-808080)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-68_passing-3fb950)](#-testing)
-
-[Features](#-features) · [Quick Start](#-quick-start) · [Usage](#-usage) · [Configuration](#%EF%B8%8F-configuration) · [Architecture](#-architecture) · [Tech Stack](#-tech-stack)
-
-</div>
-
----
-
-## 🎯 Overview
-
-Chess Coach is a professional real-time chess analysis sidekick that integrates **Stockfish 18** into a dual-interface application. It evaluates positions exclusively during **your turn**, detects blunders and missed opportunities, suggests best moves with visual arrows, presents principal variation lines, and identifies openings via a **500-entry ECO database** — while staying completely silent when you manually enter opponent moves.
-
-**Perfect for:** Online chess (chess.com, lichess) where you play one side and want expert-level guidance without distraction.
-
-> 📖 **Deep dive into design:** See **[ARCHITECTURE.md](ARCHITECTURE.md)** for module responsibilities, concurrency model, data flow, and testing strategy.
-
-| Interface | Use Case |
-|-----------|----------|
-| **Desktop GUI** (PyQt6) | Full-featured analysis with premium UI, glass sidebar, animated eval bar, piece slide animation, coach dashboard, move history |
-| **Web Interface** (FastAPI) | Lightweight browser access — play on PC, analyze on phone (same LAN) with 6 REST endpoints |
-
----
-
-## ✨ Features
-
-<table>
-  <tr>
-    <td>
-      <h4>🧑‍🤝‍🧑 Single-Side Sidekick</h4>
-      Select your side (White/Black). Coach analyzes only your moves. You manually enter opponent moves — coach stays silent during opponent's turn.
-    </td>
-    <td>
-      <h4>🎯 ECO Opening Detection</h4>
-      <strong>500 entries</strong> across A00–E99. Detects 50+ named openings (Ruy Lopez, Sicilian Najdorf, French, Grünfeld, Benoni, Catalan, etc.) with longest-prefix matching.
-    </td>
-  </tr>
-  <tr>
-    <td>
-      <h4>⚡ Real-time Evaluation</h4>
-      Continuous Stockfish 18 analysis updates eval, depth, and principal variation as you play. Eval bar with smooth 200ms animation.
-    </td>
-    <td>
-      <h4>🚨 Blunder & Miss Detection</h4>
-      Flags moves losing ≥1.0 pawns (blunders) <em>and</em> missed opportunities where opponent blundered but you failed to capitalize.
-    </td>
-  </tr>
-  <tr>
-    <td>
-      <h4>🎯 Best Move Arrow</h4>
-      Configurable arrow overlay (color + opacity) showing the top Stockfish line for the current position.
-    </td>
-    <td>
-      <h4>📊 Coach Dashboard</h4>
-      Premium glass-effect sidebar: eval bar (green→white→gray gradient), centipawn score, advantage label, engine depth, PV line, opening name, and natural-language coach feedback.
-    </td>
-  </tr>
-  <tr>
-    <td>
-      <h4>🔄 Undo / Redo</h4>
-      Full move-history navigation with Ctrl+Z / Ctrl+Y. Works even after checkmate — undo to continue.
-    </td>
-    <td>
-      <h4>♟️ Underpromotion</h4>
-      When a pawn reaches the 8th rank, a dialog lets you choose Queen, Rook, Bishop, or Knight — no auto-promotion.
-    </td>
-  </tr>
-  <tr>
-    <td>
-      <h4>🔊 Move Sounds</h4>
-      Subtle WAV click on each move via QSoundEffect. Auto-generated at first run — zero external assets needed.
-    </td>
-    <td>
-      <h4>🌐 LAN Multi-device</h4>
-      Web server auto-detects your LAN IP — analyze on your phone while Stockfish runs on your PC.
-    </td>
-  </tr>
-  <tr>
-    <td>
-      <h4>⚙️ Configurable Engine</h4>
-       Tweak Stockfish threads, hash size, analysis time via <code>config.yaml</code>. Thread-safe initialization with double-checked locking.
-    </td>
-    <td>
-      <h4>🖌️ Premium UI</h4>
-      Dark charcoal gradient background, frosted-glass sidebar, 150ms ease-out piece slide animation, blue glow button hover, smooth eval bar transitions.
-    </td>
-  </tr>
-  <tr>
-    <td>
-      <h4>📋 PGN Import/Export</h4>
-      Export games to PGN for analysis in any chess GUI. Import PGN files to replay annotated games.
-    </td>
-    <td>
-      <h4>🔍 Analysis Board Mode</h4>
-      Paste any FEN position for deep Stockfish analysis — ideal for post-game review or studying specific positions.
-    </td>
-  </tr>
-</table>
-
----
-
-## 📸 Screenshots
-
-<p align="center">
-  <img src="screenshots/Side-by-side.png" width="420" alt="Desktop GUI — Coach Dashboard with glass sidebar, eval bar, piece animation"/>
-  <img src="screenshots/Server.png" width="420" alt="Web Interface — browser-based chess analysis"/>
-</p>
-
----
-
-## 🚀 Quick Start
-
-### Prerequisites
-
-- **Python 3.10+**
-- **Stockfish 18** — download from [stockfishchess.org](https://stockfishchess.org/download/)
-
-### Setup (All Platforms)
-
-1. Clone the repo: `git clone https://github.com/krsnaSuraj/chess-coach.git && cd chess-coach`
-2. Install dependencies: `pip install -r requirements.txt`
-3. Download Stockfish 18 and place `stockfish.exe` in the project root
-4. Done! Run the app below
-
-For detailed platform-specific instructions, see **[INSTALLATION.md](INSTALLATION.md)**
-
-### Launch
-
-```bash
-# Desktop GUI
-python -m chess_coach
-
-# Web server (http://localhost:8000)
-python -m chess_coach web
-python -m chess_coach web 8080    # custom port
-```
-
----
-
-## 🖥️ Usage
-
-### Desktop GUI Workflow
-
-1. Run `python -m chess_coach`
-2. Select your color — **White** or **Black** (your side in the online game)
-3. Play your move → coach analyzes and displays best move + opening + feedback
-4. Opponent moves online → **drag their pieces on the app to record the move**
-5. Coach shows "Waiting — *Color*'s turn" during opponent's turn (no analysis)
-6. Repeat until game ends
-7. Use **Undo** / **Redo** buttons or `Ctrl+Z` / `Ctrl+Y` to navigate history
-8. **New Game** restarts with a fresh color choice
-
-**Key Insight:** You can drag *any* piece at *any* time (unrestricted), so entering opponent moves is seamless.
-
-The sidebar shows:
-
-| Panel | Content | Shows When |
-|-------|---------|-----------|
-| **Turn Indicator** | Current side to move, check/checkmate/stalemate status | Always |
-| **Opening** | ECO code + opening name (e.g., `[C42] Petrov Defense`) | Always |
-| **Evaluation** | Centipawn score, colored eval bar, advantage label | Your turn only |
-| **Best Line** | Top engine move and 4-ply principal variation | Your turn only |
-| **Coach Feedback** | Position assessment + blunder/miss alerts | Your turn only |
-| **Move History** | Annotated move list with SAN + check notation | Always |
-
-### Web Interface Workflow
-
-Same chess logic, served over HTTP:
-
-1. Run `python -m chess_coach web`
-2. Open **http://localhost:8000** in your browser (or the LAN URL for other devices)
-3. Select your color → play as above
-4. Promotion dialog appears when a pawn reaches the 8th rank
-
----
-
-## 💡 The Sidekick Workflow
-
-**Typical online chess session with Chess Coach:**
+Real-time chess analysis sidekick powered by **Stockfish 18**. Runs locally alongside your browser — shows the best move on a board with an arrow. You play on chess.com/lichess, enter moves manually, and the coach guides you to win without detection.
 
 ```
-You (Playing Online)                                     Chess Coach App
-─────────────────────────────────────────────────────────────────────────
-Play move (e.g., 1.e4)                                   → [Coach analyzes]
-                                                          → "Best: e4, Position equal"
-                                                          → "[C42] Petrov Defense"
-                                                          
-Opponent plays (e.g., ...c5)                             [You drag c7→c5]
-                                                          [Coach says "Waiting — Black's turn"]
-                                                          (No analysis during opponent's turn)
-                                                          
-Play move (e.g., 2.Nf3)                                  → [Coach analyzes]
-                                                          → "Best: Nf3, You're better"
-                                                          
-Opponent plays (e.g., ...d6)                             [You drag d7→d6]
-                                                          [Coach stays silent]
-                                                          
-[… game continues …]
++------------------+          +---------------------+          +------------------+
+|  chess.com       |          |  Chess Coach v1.0   |          |  Stockfish 18    |
+| (your browser)   |          |  (desktop or web)   |          |  (engine)        |
++------------------+          +---------------------+          +------------------+
+        |                               |                              |
+  1. You move     ---->   2. Enter the same move      3. analyze(board)
+        |                        manually                   ---------->
+        |                               |                              |
+        |                       4. Arrow shows best move                |
+        |                       5. You play it on chess.com             |
+        |                               |                              |
+  6. Opponent moves <----   7. Enter opponent's move                    |
+        |                               |                              |
+  8. Repeat from #2                                                       |
 ```
-
----
-
-## ⚙️ Configuration
-
-Edit `config.yaml`:
-
-```yaml
-engine:
-  path: "stockfish.exe"        # Stockfish binary path
-  threads: 2                    # CPU threads
-  hash: 64                      # Hash table (MB)
-  movetime: 2000                # Desktop analysis (ms)
-  web_movetime: 0.15            # Web analysis (seconds)
-
-display:
-  dark_square: "#B58863"
-  light_square: "#F0D9B5"
-  arrow_color: "#00FF00"
-  arrow_opacity: 0.6
-```
-
-**Note:** `arrow_opacity` must be a number (0.0–1.0). Boolean values are rejected.
-
----
-
-## 🏗️ Architecture
-
-See **[ARCHITECTURE.md](ARCHITECTURE.md)** for the full system design (module responsibilities, data flow, concurrency model, ECO detection, testing strategy).
-
-**High-level overview:**
 
 ```mermaid
-graph TB
-    MAIN["python -m chess_coach [web]"]
-    
-    subgraph Desktop["Desktop GUI (PyQt6)"]
-        MW["MainWindow"]
-        CB["ChessBoard<br/>Drag-drop · Animation · Arrows"]
-        CD["CoachDashboard<br/>Glass Sidebar · Eval Bar · Feedback"]
-        SP["SoundManager<br/>Move Sounds"]
-        MW --> CB & CD & SP
-    end
-    
-    subgraph Web["Web Server (FastAPI)"]
-        SV["FastAPI Server<br/>REST API"]
-        STATIC["static/ frontend<br/>chessboard.js"]
-        SV --> STATIC
-    end
-    
-    subgraph Core["Shared Core"]
-        GC["GameController<br/>Board · Phases · Undo/Redo · Cache"]
-        EH["EngineHandler<br/>Stockfish · QThread · UCI"]
-        ECO["ECO Handler<br/>500 Openings"]
-        GC --> EH
-        MW --> GC & ECO
-        SV --> GC
-    end
-    
-    MAIN --> Desktop & Web
-    EH --> SF["Stockfish 18<br/>(UCI Process)"]
+graph TD
+    A[User plays chess.com] -->|manual input| B[ChessBoard Widget]
+    B -->|move_made signal| C[MainWindow]
+    C -->|board.fen| D[EngineHandler]
+    D -->|UCI protocol, MultiPV=5| E[Stockfish 18]
+    E -->|5 PV lines, streaming| F[_on_analysis callback]
+    F -->|ranked candidates| G[Humanizer select_move]
+    G -->|humanized move| B
+    B -->|SVG arrow| H[Best move displayed]
 ```
 
----
+## Features
 
-## 📁 Project Structure
+| Feature | Desktop | Web |
+|---------|---------|-----|
+| Interactive board with drag-drop | Yes | Yes |
+| Best-move arrow | Green SVG arrow | Green highlight |
+| MultiPV analysis | 5 lines streaming | 5 lines fixed-time |
+| ECO opening detection | 500 entries, A00–E99 | Same database |
+| Undo/redo stacks | Full | Full |
+| PGN import/export | Full | — |
+| Animated eval bar | Glass sidebar | SVG |
+| Anti-detection humanizer | Full | Full |
+| Engine heartbeat restart | Auto | Auto |
 
-```
-chess-coach/
-│
-├── src/chess_coach/              # Python package
-│   ├── __init__.py               # Public API exports (19 symbols: 4 config + 2 game + 2 ECO + 6 GUI + 2 server + 3 PGN)
-│   ├── __main__.py               # CLI entry: python -m chess_coach [web]
-│   ├── config.py                 # YAML loader, port probe, IP lookup
-│   ├── game_controller.py        # Shared game state, undo/redo, phases, cache
-│   ├── engine_handler.py         # Stockfish 18 UCI wrapper (QObject + QThread)
-│   ├── chess_board.py            # Board widget: drag-drop, highlights, arrows, 150ms animation
-│   ├── coach_dashboard.py        # Glass sidebar: animated eval bar, feedback, opening
-│   ├── promotion_dialog.py       # Underpromotion choice dialog (Q/R/B/K)
-│   ├── main_window.py            # Wires board + dashboard + engine + menus + sounds
-│   ├── server.py                 # FastAPI web server, 6 REST endpoints, CORS
-│   ├── eco_handler.py            # ECO opening detection (longest-prefix match)
-│   ├── eco_data.py               # 500-entry ECO database (A00–E99, all covered)
-│   ├── sound_manager.py          # WAV generation + QSoundEffect playback
-│   └── pgn_handler.py            # PGN export/import utilities
-│
-├── tests/                        # 68 tests with pytest
-│   ├── test_config.py            # Config loading, type validation, error handling
-│   ├── test_game_controller.py   # Board state, undo/redo, phases, transitions
-│   ├── test_eco.py               # ECO database integrity + opening detection (13 tests)
-│   └── test_pgn_handler.py       # PGN export/import roundtrip (19 tests)
-│
-├── static/                       # Web frontend
-├── screenshots/                  # App screenshots
-├── config.yaml                   # Engine & display settings
-├── pyproject.toml                # Modern Python packaging (PEP 621)
-├── requirements.txt              # Python dependencies
-├── ARCHITECTURE.md               # System architecture (this file)
-├── INSTALLATION.md               # Detailed setup guide
-├── README.md                     # This file
-└── LICENSE                       # MIT License
-```
-
----
-
-## 🛠️ Tech Stack
-
-| Layer | Technology | Role |
-|-------|-----------|------|
-| **Language** | Python 3.10+ | Core logic and glue |
-| **Desktop UI** | PyQt6 | Native chess board, drag-drop, glass sidebar, piece animation |
-| **Web Framework** | FastAPI + Uvicorn | REST API, static serving, CORS |
-| **Engine Protocol** | python-chess (`chess.engine`) | UCI communication with Stockfish |
-| **Engine** | Stockfish 18 | Position evaluation, best move, PV extraction |
-| **Web Frontend** | chessboard.js + chess.js | Browser-based board interaction |
-| **Concurrency** | `threading` (RLock) + `QThread` | Non-blocking engine analysis, thread-safe state |
-| **Sound** | PyQt6.QtMultimedia (QSoundEffect) | Move click sound (auto-generated WAV) |
-| **AI/Detection** | ECO database (500 entries) | Opening name recognition via longest-prefix match |
-| **Configuration** | PyYAML | `config.yaml` parsing with type validation |
-| **Testing** | pytest | 68 tests, 10 test classes |
-
----
-
-## 🧪 Testing
+## Quick Start
 
 ```bash
-pytest                  # Run all 68 tests
-pytest -v               # Verbose output
-pytest --cov=chess_coach # Coverage report
+# Install dependencies
+pip install -r requirements.txt
+
+# Place Stockfish 18 binary in project root as stockfish.exe
+# (or configure custom path in config.yaml)
+
+# Desktop GUI (PyQt6)
+python -m chess_coach
+
+# Web server (FastAPI + static frontend)
+python -m chess_coach web
+python -m chess_coach web 8080     # custom port
 ```
 
-**Test categories:**
-- **Config**: YAML loading, display validation, type safety, opacity rejection
-- **Game Controller**: Board state, human moves, undo/redo, phase transitions, SAN generation
-- **ECO**: Database integrity (no duplicates, valid codes), opening detection for 7+ named lines
-- **PGN Handler**: Export/import roundtrip, check symbols, game results, replay
+## Architecture
 
----
+```
+chess/
+├── src/chess_coach/         # 15 source files
+│   ├── __init__.py           # v1.0.0, public API exports
+│   ├── __main__.py           # Entry point: desktop GUI or web server
+│   ├── chess_board.py        # PyQt chessboard widget (drag-drop, arrows)
+│   ├── coach_dashboard.py    # Eval bar, best-move label, feedback panel
+│   ├── config.py             # YAML config loader, port/IP utilities
+│   ├── eco_data.py           # 500-entry ECO database (A00–E99)
+│   ├── eco_handler.py        # Opening name detection via longest-prefix
+│   ├── engine_handler.py     # Stockfish UCI wrapper (MultiPV streaming)
+│   ├── game_controller.py    # Board state, undo/redo, game phases
+│   ├── humanizer.py          # Anti-detection move selection engine
+│   ├── main_window.py        # Desktop main window (menus, signals, layout)
+│   ├── pgn_handler.py        # PGN parsing, export, replay
+│   ├── promotion_dialog.py   # Underpromotion picker (N/B/R/Q)
+│   ├── server.py             # FastAPI web server (6 REST endpoints)
+│   └── sound_manager.py      # Move-click WAV sounds
+├── static/                   # Web frontend (HTML5 chessboard)
+├── stockfish/                # Secondary engine binary
+├── tests/                    # 95 tests across 5 files
+├── config.yaml               # Engine, humanizer, display settings
+├── pyproject.toml            # v1.0.0, dependencies, entry point
+└── stockfish.exe             # Primary Stockfish 18 binary
+```
 
-## 🤝 Contributing
+```mermaid
+graph LR
+    subgraph Desktop
+        MW[MainWindow] --> CB[ChessBoard]
+        MW --> EH[EngineHandler]
+        MW --> DH[Dashboard]
+        EH --> SF[Stockfish 18]
+    end
 
-1. Fork → `git checkout -b feat/your-idea`
-2. Code → `pytest` must pass
-3. Commit → `git commit -m "feat: add your feature"`
-4. Push → `git push origin feat/your-idea`
-5. Pull Request
+    subgraph Web
+        API[FastAPI /api/*] --> GC[GameController]
+        API --> SFW[Stockfish SimpleEngine]
+    end
 
----
+    subgraph Shared
+        H[Humanizer]
+        ECO[ECO Database]
+        CFG[config.yaml]
+    end
 
-## 📄 License
+    EH --> SF
+    MW --> H
+    API --> H
+    MW --> ECO
+    API --> ECO
+    MW --> CFG
+    API --> CFG
+```
 
-Distributed under the **MIT License**. See [`LICENSE`](LICENSE).
+## Anti-Detection System
 
----
+The humanizer makes your play look like a rapidly improving human, not a bot.
 
-<p align="center">
-  <a href="https://github.com/krsnaSuraj/chess-coach">
-    <img src="https://img.shields.io/badge/-View_on_GitHub-181717?logo=github&logoColor=white" alt="GitHub">
-  </a>
-  <br>
-  <sub>Built with ♟️ by <a href="https://github.com/krsnaSuraj">Krsna Suraj</a></sub>
-</p>
+```
+                     ELO Curve Over Games
+2000 |                                     ...██
+     |                               ...███
+1900 |                         ...███
+     |                   ...███
+1800 |             ...███
+     |       ...███
+1700 | .███
+     |█
+1500 |____________________________________
+        0    5    10   15   20   25   30
+                    Games Played
+```
+
+| Mechanism | Description |
+|-----------|-------------|
+| **Accuracy calibration** | Based on GM Larry Kaufman's study: 1500 ELO ≈ 79% engine-match, 2800 ≈ 92% |
+| **Progressive auto-climb** | +20–50 ELO per game, capped at target+500. Simulates a fast improver |
+| **Winning-position tilt** | Drops ELO 40–120 when up +2.5 — plays relaxed when comfortably ahead |
+| **Complex-position boost** | +15–50 ELO on tactical middlegames — concentration spike |
+| **Human-like errors** | Blunders target hanging material, mistakes avoid top-3 engine moves |
+| **Session coherence** | Monitors accuracy variance across games — too-consistent play looks robotic |
+| **15% random dips** | Occasional ELO drops break monotonic improvement |
+
+### Risk Assessment Levels
+
+| Level | Criteria | Meaning |
+|-------|----------|---------|
+| **SAFE** | Deviation < 4%, coherence < 0.70 | Natural human play |
+| **CAUTION** | Deviation 4–8%, coherence 0.70–0.85 | Slightly suspicious |
+| **WARNING** | Deviation 8–12%, coherence 0.85–0.95 | Risk flagged |
+| **CRITICAL** | Deviation > 12%, coherence > 0.95 | Likely detection |
+
+## Configuration
+
+```yaml
+# config.yaml
+engine:
+  path: "stockfish.exe"    # Engine binary location
+  threads: 2               # CPU threads for Stockfish
+  hash: 64                 # Hash table size in MB
+  movetime: 2000           # Desktop analysis time (ms)
+  web_movetime: 0.15       # Web analysis time (seconds)
+  multipv: 5               # Multi-PV lines to evaluate
+
+humanizer:
+  enabled: true
+  target_elo: 1500         # Starting ELO (climbs automatically)
+  personality: "balanced"  # balanced | aggressive | solid | tricky
+  error_injection:
+    inaccuracy_rate: 0.10  # 10% chance of non-top-engine move
+    mistake_rate: 0.03     # 3% chance of clearly worse move
+    blunder_rate: 0.005    # 0.5% chance of hanging material
+```
+
+## API Endpoints (Web Mode)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/health` | Engine status check |
+| `POST` | `/api/start_game` | Start new game `{human_is_white: bool}` |
+| `GET` | `/api/game_state` | Current FEN, coach data, mode |
+| `POST` | `/api/human_move` | Submit move `{move_uci: "e2e4"}` |
+| `POST` | `/api/undo` | Undo last move pair |
+| `POST` | `/api/redo` | Redo undone move pair |
+
+## Testing
+
+```bash
+python -m pytest tests/ -v    # 95 tests, 5 modules
+python -m pytest tests/ -q    # Compact output
+```
+
+- **14 config tests** — YAML loading, defaults, validation
+- **13 ECO tests** — Database integrity, 50+ named openings
+- **22 game controller tests** — State machine, undo/redo, checkmate
+- **27 humanizer tests** — ELO calibration, error injection, progressive climb
+- **19 PGN handler tests** — Parsing, export, roundtrip, replay
+
+## Requirements
+
+- Python 3.10+
+- [Stockfish 18](https://stockfishchess.org/download/) binary (`stockfish.exe` / `stockfish`)
+- PyQt6 (desktop mode)
+- python-chess, PyYAML, FastAPI, uvicorn, Pydantic
+
+## License
+
+MIT

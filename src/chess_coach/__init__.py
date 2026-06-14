@@ -1,3 +1,6 @@
+__version__ = "1.0.0"
+__description__ = "Real-time chess analysis sidekick with Stockfish 18"
+
 from chess_coach.config import load_config, find_free_port, get_local_ip, ConfigError
 from chess_coach.game_controller import GameController, GamePhase
 from chess_coach.eco_data import ECO_DATABASE

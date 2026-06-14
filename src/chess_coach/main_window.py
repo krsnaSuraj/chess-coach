@@ -19,6 +19,7 @@ from chess_coach.chess_board import ChessBoard, COLORS
 from chess_coach.coach_dashboard import CoachDashboard
 from chess_coach.eco_handler import get_opening
 from chess_coach.engine_handler import EngineHandler
+from chess_coach.humanizer import Humanizer, ComplexityDetector
 from chess_coach.sound_manager import SoundManager
 from chess_coach.pgn_handler import board_to_pgn, pgn_to_moves
 
@@ -42,6 +43,8 @@ class MainWindow(QMainWindow):
         self.engine_handler.error_occurred.connect(self._on_engine_error)
         self.engine_handler.start_engine()
 
+        self.humanizer = Humanizer(self.config)
+
         self.sound_manager = SoundManager()
 
         self.analyzing_fen: str | None = None
@@ -55,6 +58,10 @@ class MainWindow(QMainWindow):
         self.redo_stack: list[tuple[chess.Move, str]] = []
         self._last_ui_update: float = 0.0
         self._ui_throttle_ms: int = 50
+
+        self._multi_pv: dict[int, dict] = {}
+        self._multi_pv_depth: int = 0
+        self._human_move_selected: chess.Move | None = None
 
         self._heartbeat = QTimer()
         self._heartbeat.timeout.connect(self._heartbeat_check)
@@ -411,6 +418,8 @@ class MainWindow(QMainWindow):
             self.has_prev_eval = False
             self.move_list.clear()
             self._reset_dashboard("New game started")
+            self.humanizer.new_game()
+            self._game_result_recorded = False
             self.chess_board.set_flipped(self.board_flipped)
             self.chess_board.playable_side = None
             self.chess_board.set_board(self.board)
@@ -421,6 +430,9 @@ class MainWindow(QMainWindow):
     def run_analysis(self) -> None:
         self.analyzing_fen = self.board.fen()
         self.analyzing_version_id = self.position_version
+        self._multi_pv = {}
+        self._multi_pv_depth = 0
+        self._human_move_selected = None
         self.engine_handler.start_analysis(self.board.copy())
 
     def _update_turn_display(self) -> None:
@@ -495,8 +507,49 @@ class MainWindow(QMainWindow):
 
             self.analysis_received = True
 
+            pv = info.get("pv")
+            multipv_num = info.get("multipv", 1)
+            depth = info.get("depth", 0)
+
+            if depth > self._multi_pv_depth and self._human_move_selected is None:
+                self._multi_pv = {}
+                self._multi_pv_depth = depth
+            if pv and len(pv) > 0:
+                self._multi_pv[multipv_num] = info
+
+            multi_pv_list = [
+                self._multi_pv[k] for k in sorted(self._multi_pv)
+                if self._multi_pv[k].get("pv")
+            ]
+            if multi_pv_list and self._human_move_selected is None:
+                is_complex = ComplexityDetector.is_complex(self.board)
+                eval_score = 0.0
+                scores = multi_pv_list[0].get("score")
+                if scores:
+                    eval_score = abs(scores.relative.score(mate_score=10000)) / 100.0
+                human_move = self.humanizer.select_move(
+                    multi_pv_list, self.board,
+                    is_complex=is_complex,
+                    eval_score=eval_score,
+                )
+                if human_move:
+                    self._human_move_selected = human_move
+
+            if self._human_move_selected:
+                self.last_known_move = self._human_move_selected
+                self.chess_board.set_best_move(self._human_move_selected)
+                self.dashboard.lbl_best.setText(self._human_move_selected.uci())
+                pv_line = self._multi_pv.get(1, {}).get("pv", pv or [])
+                if pv_line:
+                    self.dashboard.lbl_pv.setText(
+                        "Line: " + " ".join(m.uci() for m in pv_line[:4])
+                    )
+
             score = info.get("score")
             if not score:
+                return
+
+            if multipv_num != 1:
                 return
 
             now = time.time()
@@ -526,7 +579,6 @@ class MainWindow(QMainWindow):
             if self.user_color is not None:
                 self.has_prev_eval = True
 
-            depth = info.get("depth", 0)
             dash.lbl_engine.setText(f"Depth {depth}  |  {info.get('seldepth', depth)}")
 
             eval_color = (
@@ -577,18 +629,13 @@ class MainWindow(QMainWindow):
                 return
 
             if score.is_mate():
-                pv = info.get("pv")
-                if pv:
-                    self.last_known_move = pv[0]
-                    self.chess_board.set_best_move(pv[0])
-                    dash.lbl_best.setText(pv[0].uci())
-                    dash.lbl_pv.setText("")
-                    dash.lbl_feedback.setText(f"Forced mate in {abs(mate)} moves")
-                    dash.lbl_feedback.setStyleSheet(
-                        f"color: {COLORS['green']}; padding: 10px;"
-                        f"border: 1px solid {COLORS['green']}; border-radius: 4px;"
-                    )
-                    self.analysis_received = True
+                dash.lbl_pv.setText("")
+                dash.lbl_feedback.setText(f"Forced mate in {abs(mate)} moves")
+                dash.lbl_feedback.setStyleSheet(
+                    f"color: {COLORS['green']}; padding: 10px;"
+                    f"border: 1px solid {COLORS['green']}; border-radius: 4px;"
+                )
+                self.analysis_received = True
                 return
 
             feedback, feed_color = self._feedback_text(user_val)
@@ -625,14 +672,6 @@ class MainWindow(QMainWindow):
 
             dash.lbl_feedback.setText(feedback)
 
-            pv = info.get("pv")
-            if pv:
-                self.last_known_move = pv[0]
-                self.chess_board.set_best_move(pv[0])
-                dash.lbl_best.setText(pv[0].uci())
-                dash.lbl_pv.setText("Line: " + " ".join(m.uci() for m in pv[:4]))
-                self.analysis_received = True
-
         except Exception as e:
             logger.error(f"Analysis error: {e}")
 
@@ -667,6 +706,15 @@ class MainWindow(QMainWindow):
             self.chess_board.set_best_move(None)
             dash.lbl_best.setText("-")
             dash.lbl_pv.setText("")
+            if not getattr(self, "_game_result_recorded", False):
+                if self.board.is_checkmate():
+                    won = self.board.turn != self.user_color
+                    result = "win" if won else "loss"
+                else:
+                    result = "draw"
+                from chess_coach.humanizer import _accuracy_for_elo
+                self.humanizer.record_result(result, _accuracy_for_elo(self.humanizer.effective_elo))
+                self._game_result_recorded = True
             if self.board.is_checkmate():
                 winner = "Black" if self.board.turn == chess.WHITE else "White"
                 dash.lbl_feedback.setText(f"Game over! {winner} wins by checkmate.")

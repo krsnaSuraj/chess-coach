@@ -4,6 +4,33 @@ engine:
   hash: 64
   movetime: 2000
   web_movetime: 0.15
+  multipv: 5
+
+humanizer:
+  enabled: true
+  target_elo: 1500
+  personality: "balanced"
+  aggression: 0.5
+  classical: 0.5
+  think_time:
+    base_ms: 1500
+    min_ms: 300
+    max_ms: 10000
+  cpl_targets:
+    opening: 30
+    middlegame: 25
+    endgame: 20
+  error_injection:
+    inaccuracy_rate: 0.10
+    mistake_rate: 0.03
+    blunder_rate: 0.005
+  detection:
+    auto_adjust: true
+    max_correlation: 0.75
+    min_cpl_buffer: 5
+  session:
+    warmup_games: 5
+    persist_personality: true
 
 display:
   dark_square: "#B58863"
