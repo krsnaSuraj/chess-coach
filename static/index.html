@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Chess Coach</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="css/chessboard.css">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, sans-serif;
+            background: #0d1117;
+            color: #f0f6fc;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            padding: 16px;
+            touch-action: manipulation;
+        }
+        #board { touch-action: none; }
+
+        .modal-overlay {
+            position: fixed; inset: 0;
+            background: rgba(13, 17, 23, 0.97);
+            backdrop-filter: blur(8px);
+            z-index: 2000;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: scale(1); } }
+
+        .modal-overlay h2 {
+            color: #58a6ff;
+            font-size: 1.5rem;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            margin-bottom: 32px;
+            font-weight: 600;
+        }
+
+        .color-btn {
+            padding: 18px 48px;
+            margin: 8px;
+            font-size: 1.2rem;
+            background: #161b22;
+            color: #f0f6fc;
+            border: 1px solid #30363d;
+            border-radius: 10px;
+            min-width: 240px;
+            cursor: pointer;
+            transition: all 0.25s ease;
+            letter-spacing: 0.5px;
+        }
+
+        .color-btn:hover {
+            border-color: #58a6ff;
+            background: #1c2333;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(88, 166, 255, 0.15);
+        }
+
+        .color-btn:active { transform: translateY(0); }
+
+        .status-bar {
+            width: 100%;
+            max-width: 360px;
+            width: min(92vw, 360px);
+            text-align: center;
+            margin-bottom: 12px;
+            padding: 12px 16px;
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 10px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.4);
+        }
+
+        .status-text { font-size: 1.05rem; font-weight: 600; margin-bottom: 2px; letter-spacing: 0.2px; }
+        .eval-text { font-size: 1.25rem; font-weight: 700; font-family: ui-monospace, 'Cascadia Code', 'JetBrains Mono', Consolas, monospace; transition: color 0.3s ease; }
+        .eval-label { font-size: 0.8rem; margin-top: 2px; color: #8b949e; transition: color 0.3s ease; }
+
+        .board-wrapper {
+            position: relative;
+            width: 100%;
+            max-width: 360px;
+            width: min(92vw, 360px);
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.5);
+            border: 1px solid rgba(255,255,255,0.06);
+        }
+
+        #board { width: 100%; }
+        #overlay {
+            pointer-events: none;
+            position: absolute; inset: 0;
+            z-index: 100;
+        }
+
+        .hidden { display: none !important; }
+
+
+
+        .spinner {
+            display: inline-block; width: 14px; height: 14px;
+            border: 2px solid #30363d;
+            border-top-color: #58a6ff;
+            border-radius: 50%;
+            animation: spin 0.7s linear infinite;
+            margin-right: 6px; vertical-align: middle;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .status-text.loading { color: #8b949e; }
+
+        .footer { margin-top: 16px; font-size: 0.7rem; color: #484f58; }
+
+        .eval-bar-wrap {
+            width: 100%; height: 6px;
+            background: #161b22;
+            border-radius: 3px;
+            margin-top: 6px; overflow: hidden;
+        }
+        .eval-bar-fill {
+            height: 100%; width: 50%;
+            border-radius: 3px;
+            transition: width 0.4s ease, background 0.4s ease;
+        }
+
+        .engine-depth {
+            font-size: 0.75rem; color: #484f58;
+            margin-top: 2px; text-align: center;
+        }
+        .opening-name {
+            font-size: 0.85rem; color: #58a6ff;
+            margin-top: 2px; text-align: center;
+            font-weight: 600;
+        }
+        .pv-line {
+            font-size: 0.75rem; color: #8b949e;
+            margin-top: 4px; text-align: center;
+            font-family: 'Consolas', 'Courier New', monospace;
+            word-break: break-all;
+            min-height: 1.2em;
+        }
+
+        .btn-row {
+            display: flex; gap: 6px; margin-top: 14px;
+            flex-wrap: wrap; justify-content: center;
+        }
+        .btn-reset {
+            padding: 10px 18px;
+            background: #161b22;
+            color: #f0f6fc;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: all 0.25s ease;
+            min-width: 72px;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .btn-reset:hover {
+            border-color: #58a6ff;
+            background: #1c2333;
+        }
+        .btn-reset:active { transform: scale(0.96); }
+
+        @media (max-width: 480px) {
+            body { padding: 8px; }
+            .status-bar { padding: 8px 10px; }
+            .status-text { font-size: 0.9rem; }
+            .eval-text { font-size: 1.4rem; }
+            .btn-reset {
+                padding: 10px 14px; font-size: 0.8rem;
+                min-width: 64px;
+            }
+            .btn-row { gap: 4px; }
+        }
+
+        @media (max-height: 700px) {
+            .status-bar { padding: 6px 10px; margin-bottom: 6px; }
+            .eval-text { font-size: 1.1rem; }
+            .footer { display: none; }
+        }
+    </style>
+</head>
+<body>
+
+<div id="modal" class="modal-overlay">
+     <h2>Select Your Color</h2>
+     <button class="color-btn" onclick="initGame(true)">Play as White</button>
+     <button class="color-btn" onclick="initGame(false)">Play as Black</button>
+ </div>
+
+ <div id="promoModal" class="modal-overlay hidden">
+     <h2>Promote Pawn</h2>
+     <div style="display:flex; gap:12px; flex-wrap:wrap; justify-content:center;">
+         <button id="promoQ" class="color-btn" style="min-width:80px; padding:12px 20px; font-size:2rem;" onclick="choosePromotion('q')"></button>
+         <button id="promoR" class="color-btn" style="min-width:80px; padding:12px 20px; font-size:2rem;" onclick="choosePromotion('r')"></button>
+         <button id="promoB" class="color-btn" style="min-width:80px; padding:12px 20px; font-size:2rem;" onclick="choosePromotion('b')"></button>
+         <button id="promoN" class="color-btn" style="min-width:80px; padding:12px 20px; font-size:2rem;" onclick="choosePromotion('n')"></button>
+     </div>
+ </div>
+
+<div class="status-bar">
+    <div class="status-text" id="status">
+        <span id="spinner" class="spinner" style="display:none;"></span>
+        <span id="statusText">Connecting...</span>
+    </div>
+    <div class="eval-text" id="eval">--</div>
+    <div class="eval-label" id="evalLabel"></div>
+    <div class="eval-bar-wrap"><div class="eval-bar-fill" id="evalBarFill" style="width:50%"></div></div>
+    <div class="engine-depth" id="engineDepth"></div>
+    <div class="opening-name" id="openingName">&mdash;</div>
+    <div class="pv-line" id="pvLine"></div>
+    <div class="game-status" id="gameStatus" style="font-size:0.85rem;margin-top:4px;font-weight:bold;"></div>
+</div>
+
+<div class="board-wrapper">
+    <div id="board"></div>
+    <svg id="overlay" viewBox="0 0 100 100" preserveAspectRatio="none"></svg>
+</div>
+
+<div class="btn-row">
+    <button class="btn-reset" onclick="undoMove()" id="btnUndo">Undo</button>
+    <button class="btn-reset" onclick="redoMove()" id="btnRedo">Redo</button>
+    <button class="btn-reset" onclick="location.reload()">New Game</button>
+</div>
+<div class="footer">Ready</div>
+
+<script src="js/jquery.min.js"></script>
+<script src="js/chess.js"></script>
+<script src="js/chessboard.js"></script>
+
+<script>
+if (window.location.protocol === 'file:') {
+    document.body.innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:40px;text-align:center;"><h2 style="color:#f85149;margin-bottom:20px;">Cannot open directly</h2><p style="color:#8b949e;font-size:16px;max-width:400px;">This file must be opened through the Chess Coach web server.</p><br><p style="color:#8b949e;font-size:14px;">Run this command first:</p><pre style="background:#161b22;padding:12px 20px;border-radius:6px;color:#58a6ff;margin-top:10px;">python run.py web</pre><p style="color:#8b949e;font-size:14px;margin-top:10px;">Then open http://localhost:8000</p></div>';
+    throw new Error('Opened directly - need server');
+}
+
+const STATE = { game: new Chess(), board: null, isWhite: true, busy: false, pendingMove: null };
+
+async function checkHealth() {
+    try {
+        const res = await fetch('/api/health');
+        if (!res.ok) throw new Error('Server not ready');
+        const data = await res.json();
+        if (!data.engine_running) {
+            setStatus('Server running, but engine failed to start');
+        }
+    } catch (e) {
+        setStatus('Cannot connect to server. Run: python run.py web');
+        throw e;
+    }
+}
+
+checkHealth().catch(() => {});
+
+ function initGame(isWhite) {
+     STATE.isWhite = isWhite;
+     document.getElementById('modal').classList.add('hidden');
+
+     const orientation = isWhite ? 'white' : 'black';
+     STATE.board = Chessboard('board', {
+        draggable: true,
+        position: 'start',
+        orientation: orientation,
+        pieceTheme: 'img/chesspieces/wikipedia/{piece}.png',
+        onDragStart,
+        onDrop,
+        onSnapEnd: () => STATE.board.position(STATE.game.fen())
+    });
+
+    $(window).resize(STATE.board.resize);
+    apiCall('/api/start_game', { human_is_white: isWhite })
+        .then(processResponse)
+        .catch(handleError);
+}
+
+ function onDragStart(source, piece) {
+     if (STATE.busy || STATE.game.game_over()) return false;
+     return true;
+ }
+
+function cancelPromotion() {
+    hidePromoDialog();
+    if (!STATE.pendingMove) return;
+    STATE.game.undo();
+    STATE.board.position(STATE.game.fen());
+    STATE.pendingMove = null;
+}
+
+async function onDrop(source, target) {
+    const piece = STATE.game.get(source);
+    if (!piece) return 'snapback';
+
+    const playerRank = STATE.isWhite ? '8' : '1';
+    const isPromotion = piece.type === 'p' && target[1] === playerRank;
+
+    if (isPromotion) {
+        STATE.pendingMove = { from: source, to: target };
+        STATE.game.move({ from: source, to: target, promotion: 'q' });
+        showPromoDialog();
+        return;
+    }
+
+    const moveObj = STATE.game.move({ from: source, to: target, promotion: 'q' });
+    if (moveObj === null) return 'snapback';
+
+    await submitMove(moveObj);
+}
+
+function showPromoDialog() {
+    const whitePieces = ['♕', '♖', '♗', '♘'];
+    const blackPieces = ['♛', '♜', '♝', '♞'];
+    const pieces = STATE.isWhite ? whitePieces : blackPieces;
+    document.getElementById('promoQ').textContent = pieces[0];
+    document.getElementById('promoR').textContent = pieces[1];
+    document.getElementById('promoB').textContent = pieces[2];
+    document.getElementById('promoN').textContent = pieces[3];
+    document.getElementById('promoModal').classList.remove('hidden');
+}
+
+function hidePromoDialog() {
+    document.getElementById('promoModal').classList.add('hidden');
+}
+
+function choosePromotion(piece) {
+    hidePromoDialog();
+    const pm = STATE.pendingMove;
+    STATE.pendingMove = null;
+    if (!pm) return;
+
+    STATE.game.undo();
+    const moveObj = STATE.game.move({ from: pm.from, to: pm.to, promotion: piece });
+    if (moveObj === null) {
+        STATE.board.position(STATE.game.fen());
+        return;
+    }
+    submitMove(moveObj);
+}
+
+async function submitMove(moveObj) {
+    STATE.busy = true;
+    clearArrow();
+    showLoading("Analyzing...");
+
+    let moveUci = moveObj.from + moveObj.to;
+    if (moveObj.promotion) {
+        moveUci += moveObj.promotion;
+    }
+
+    try {
+        const data = await apiCall('/api/human_move', { move_uci: moveUci });
+        if (!data.ok) {
+            STATE.game.undo();
+            STATE.board.position(STATE.game.fen());
+            handleError(data.error || "Invalid move");
+        } else {
+            processResponse(data);
+        }
+    } catch (e) {
+        STATE.game.undo();
+        STATE.board.position(STATE.game.fen());
+        handleError(e);
+    } finally {
+        STATE.busy = false;
+    }
+}
+
+function updateStatusBar() {
+    const gs = document.getElementById('gameStatus');
+    if (STATE.game.in_checkmate()) {
+        const winner = STATE.game.turn() === 'w' ? 'Black' : 'White';
+        gs.textContent = '# Checkmate! ' + winner + ' wins!';
+        gs.style.color = '#3fb950';
+        return;
+    }
+    if (STATE.game.in_draw()) {
+        gs.textContent = 'Draw! Game over.';
+        gs.style.color = '#d29922';
+        return;
+    }
+    if (STATE.game.in_stalemate()) {
+        gs.textContent = 'Stalemate! Draw.';
+        gs.style.color = '#d29922';
+        return;
+    }
+    if (STATE.game.in_check()) {
+        gs.textContent = STATE.game.turn() === 'w' ? 'Black' : 'White';
+        gs.textContent += ' gives check!';
+        gs.style.color = '#f85149';
+        return;
+    }
+    gs.textContent = '';
+}
+
+function processResponse(data) {
+    if (!data.ok) { handleError(data.error || "Error"); return; }
+
+    STATE.game.load(data.fen);
+    STATE.board.position(data.fen);
+    updateStatusBar();
+
+    if (STATE.game.game_over()) {
+        setStatus("Game Over");
+        clearArrow();
+        document.getElementById('eval').textContent = '--';
+        document.getElementById('eval').style.color = '#888';
+        document.getElementById('evalLabel').textContent = '';
+        return;
+    }
+
+    if (data.mode === 'coach') {
+        if (data.coach) {
+            setStatus("Your Turn");
+            renderCoach(data.coach);
+        } else {
+            const turn = STATE.game.turn() === 'w' ? "White" : "Black";
+            setStatus(turn + "'s Turn");
+            clearArrow();
+            document.getElementById('eval').textContent = '--';
+            document.getElementById('eval').style.color = '#8b949e';
+            document.getElementById('evalLabel').textContent = '';
+        }
+    } else if (data.mode === 'idle') {
+        const turn = STATE.game.turn() === 'w' ? "White" : "Black";
+        setStatus(turn + "'s Turn");
+        clearArrow();
+    }
+}
+
+ function renderCoach(coach) {
+     let label = coach.label || '';
+     let color = coach.eval_color || '#8b949e';
+
+     if (!coach.label) {
+         if (coach.eval && coach.eval.includes('M')) {
+             label = coach.eval.startsWith('+') ? 'Mate for you' : 'Mate against you';
+             color = coach.eval.startsWith('+') ? '#3fb950' : '#f85149';
+         } else if (coach.eval) {
+             const n = parseFloat(coach.eval);
+             if (n > 0.30)      { label = 'You are better';       color = '#3fb950'; }
+             else if (n < -0.30) { label = 'Opponent is better';   color = '#f85149'; }
+             else                { label = 'Position is equal';     color = '#8b949e'; }
+         }
+     }
+
+     document.getElementById('eval').textContent = coach.eval || '--';
+     document.getElementById('eval').style.color = color;
+     document.getElementById('evalLabel').textContent = label;
+     document.getElementById('evalLabel').style.color = color;
+
+     const barFill = document.getElementById('evalBarFill');
+     if (barFill && coach.eval) {
+         let pct = 50;
+         if (coach.eval.includes('M')) {
+             pct = coach.eval.startsWith('+') ? 100 : 0;
+         } else {
+             const n = parseFloat(coach.eval);
+             pct = Math.max(0, Math.min(100, 50 + n * 10));
+         }
+         barFill.style.width = pct + '%';
+         barFill.style.background = pct > 55
+             ? 'linear-gradient(90deg, #2ea043, #3fb950)'
+             : pct < 45
+             ? 'linear-gradient(90deg, #da3633, #f85149)'
+             : 'linear-gradient(90deg, #6e7681, #8b949e)';
+     }
+
+     const depthEl = document.getElementById('engineDepth');
+     if (depthEl) {
+         depthEl.textContent = coach.depth ? 'Depth ' + coach.depth : '';
+     }
+
+     const openingEl = document.getElementById('openingName');
+     if (openingEl) {
+         openingEl.textContent = coach.opening || '\u2014';
+     }
+
+     const pvEl = document.getElementById('pvLine');
+     if (pvEl) {
+         if (coach.pv) {
+             const moves = coach.pv.split(' ').slice(0, 6);
+             pvEl.textContent = moves.join(' \u2192 ');
+         } else {
+             pvEl.textContent = '';
+         }
+     }
+
+     if (coach.best_move) {
+         drawArrow(coach.best_move.substring(0,2), coach.best_move.substring(2,4));
+     }
+ }
+
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && STATE.pendingMove) { e.preventDefault(); cancelPromotion(); return; }
+    if (e.ctrlKey && e.key === 'z') { e.preventDefault(); undoMove(); }
+    if (e.ctrlKey && e.key === 'y') { e.preventDefault(); redoMove(); }
+    if (e.ctrlKey && e.key === 'n') { e.preventDefault(); location.reload(); }
+});
+
+async function undoMove() {
+    if (STATE.busy) return;
+    if (STATE.pendingMove) { cancelPromotion(); return; }
+    STATE.busy = true;
+    showLoading("Undoing...");
+    try {
+        const data = await apiCall('/api/undo', {});
+        processResponse(data);
+    } catch (e) { handleError(e); }
+    finally { STATE.busy = false; }
+}
+
+async function redoMove() {
+    if (STATE.busy) return;
+    if (STATE.pendingMove) { cancelPromotion(); return; }
+    STATE.busy = true;
+    showLoading("Redoing...");
+    try {
+        const data = await apiCall('/api/redo', {});
+        processResponse(data);
+    } catch (e) { handleError(e); }
+    finally { STATE.busy = false; }
+}
+
+async function apiCall(endpoint, body) {
+    const res = await fetch(endpoint, {
+        method: body ? 'POST' : 'GET',
+        headers: { 'Content-Type': 'application/json' },
+        body: body ? JSON.stringify(body) : undefined
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    return res.json();
+}
+
+function setStatus(msg) {
+    document.getElementById('spinner').style.display = 'none';
+    document.getElementById('statusText').textContent = msg;
+}
+
+function showLoading(msg) {
+    document.getElementById('spinner').style.display = 'inline-block';
+    document.getElementById('statusText').textContent = msg;
+}
+
+function handleError(msg) {
+    console.error(msg);
+    const text = typeof msg === 'string' ? msg : (msg.message || 'Connection Error');
+    document.getElementById('spinner').style.display = 'none';
+    document.getElementById('statusText').textContent = text;
+    document.getElementById('status').style.color = '#f85149';
+}
+
+function clearArrow() { document.getElementById('overlay').innerHTML = ''; }
+
+function drawArrow(from, to) {
+    clearArrow();
+    const map = {a:0,b:1,c:2,d:3,e:4,f:5,g:6,h:7};
+    const x1 = map[from[0]], y1 = 8 - parseInt(from[1]);
+    const x2 = map[to[0]], y2 = 8 - parseInt(to[1]);
+    const pct = v => v * 12.5 + 6.25;
+    const svg = document.getElementById('overlay');
+    const line = document.createElementNS('http://www.w3.org/2000/svg','line');
+    const flip = STATE.board.orientation() === 'black';
+    const fx = v => flip ? 100 - v : v;
+    const fy = v => flip ? 100 - v : v;
+
+    line.setAttribute('x1', fx(pct(x1)));
+    line.setAttribute('y1', fy(pct(y1)));
+    line.setAttribute('x2', fx(pct(x2)));
+    line.setAttribute('y2', fy(pct(y2)));
+    line.setAttribute('stroke', '#3fb950');
+    line.setAttribute('stroke-width', '1.8');
+    line.setAttribute('stroke-linecap', 'round');
+    line.setAttribute('marker-end', 'url(#head)');
+    svg.appendChild(line);
+
+    if (!document.getElementById('head')) {
+        const defs = document.createElementNS('http://www.w3.org/2000/svg','defs');
+        const m = document.createElementNS('http://www.w3.org/2000/svg','marker');
+        m.setAttribute('id','head');
+        m.setAttribute('markerWidth','3');
+        m.setAttribute('markerHeight','3');
+        m.setAttribute('refX','1.5');
+        m.setAttribute('refY','1.5');
+        m.setAttribute('orient','auto');
+        const p = document.createElementNS('http://www.w3.org/2000/svg','polygon');
+        p.setAttribute('points','0,0 3,1.5 0,3');
+        p.setAttribute('fill','#3fb950');
+        m.appendChild(p);
+        defs.appendChild(m);
+        svg.appendChild(defs);
+    }
+}
+</script>
+</body>
+</html>

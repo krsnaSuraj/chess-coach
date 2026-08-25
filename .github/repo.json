@@ -1,0 +1,17 @@
+{
+  "description": "v0.1.0 - Real-time chess coach with Stockfish 18. Anti-detection humanizer (progressive ELO), PyQt6 GUI (740x620) + FastAPI web (360px mobile), 471 ECO, MultiPV, undo/redo, PGN. 120 tests, zero lint.",
+  "topics": [
+    "chess",
+    "stockfish",
+    "chess-analysis",
+    "anti-detection",
+    "python-chess",
+    "pyqt6",
+    "fastapi",
+    "uci",
+    "lichess",
+    "chess-engine",
+    "chess-coach",
+    "hack"
+  ]
+}

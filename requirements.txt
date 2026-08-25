@@ -1,0 +1,6 @@
+PyQt6>=6.6
+python-chess==1.999
+PyYAML==6.0.3
+fastapi>=0.110
+uvicorn[standard]>=0.29
+pydantic>=2.7

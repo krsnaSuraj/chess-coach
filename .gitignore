@@ -1,0 +1,54 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environment
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Binaries
+stockfish.exe
+stockfish
+bin/
+
+# Temp test files (but not __main__.py / __init__.py)
+_*.py
+!_*main*.py
+!_*init*.py
+_*.ps1
+._*.tmp
+._*.txt
+
+# Testing
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Environment
+.env
+
+# Logs
+*.log
+
+# Command Code
+.commandcode/
+
+# Screenshots
+screenshots/
