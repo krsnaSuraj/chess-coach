@@ -66,7 +66,12 @@ class GameController:
                 return "No game in progress"
             if not self.redo_stack:
                 return "No moves to redo"
-            move = self.redo_stack.pop()
+            move = self.redo_stack[-1]
+            # The board may have been replaced (analysis FEN) without clearing
+            # the stack — never push an illegal move onto a live board.
+            if move not in self.board.legal_moves:
+                return "Redo no longer legal"
+            self.redo_stack.pop()
             self.board.push(move)
             if self.board.turn == chess.WHITE:
                 self.move_number += 1
@@ -84,6 +89,27 @@ class GameController:
         with self.lock:
             if self.game_phase != GamePhase.PLAYING:
                 return "Game not in progress"
+            # Turn ownership: human may only move their own side.
+            # Opponent moves are entered as copy-moves via copy_opponent_move().
+            if self.human_side is not None and self.board.turn != self.human_side:
+                # Allow opponent copy-move explicitly through copy path only
+                return "Not your turn — enter opponent move as copy"
+            if move not in self.board.legal_moves:
+                return "Illegal move"
+            self.record_move(move)
+        return None
+
+    def copy_opponent_move(self, move_uci: str) -> str | None:
+        """Enter the opponent's move (played on chess.com) to keep boards in sync."""
+        try:
+            move = chess.Move.from_uci(move_uci)
+        except Exception:
+            return "Invalid move format"
+        with self.lock:
+            if self.game_phase != GamePhase.PLAYING:
+                return "Game not in progress"
+            if self.human_side is not None and self.board.turn == self.human_side:
+                return "Not opponent turn"
             if move not in self.board.legal_moves:
                 return "Illegal move"
             self.record_move(move)

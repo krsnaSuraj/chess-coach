@@ -1,50 +1,58 @@
-# Chess Coach v0.1.0 — Architecture
+# Chess Coach v0.1.1 — Architecture
+
+## Contents
+
+- [Project Map](#project-map)
+- [Overview](#overview)
+- [Data Flow](#data-flow--one-human-turn-web)
+- [Module Deep Dives](#module-deep-dives)
+- [Concurrency](#concurrency)
+- [API](#api)
+- [Security](#security)
+- [Version / License](#version--license)
+
+---
 
 ## Project Map
 
 ```
 chess-coach/
-├── src/chess_coach/           # 15 modules
-│   ├── __init__.py            # __version__ = "0.1.0"
-│   ├── __main__.py            # CLI desktop/web + port (argparse ready)
-│   ├── config.py              # YAML loader + find_free_port(0.0.0.0 race) + get_local_ip(8.8.8.8)
-│   ├── game_controller.py     # RLock board + undo/redo + phase AWAITING_COLOR/PLAYING/GAME_OVER
-│   ├── engine_handler.py      # UCI wrapper QThread (multipv param, not setoption)
-│   ├── server.py              # FastAPI 6 endpoints + global _analysis_cache 200
-│   ├── humanizer.py           # 380L anti-detection (M1 never miss, blunder hanging)
-│   ├── chess_board.py         # QWidget 280px min, DPR×0.88, arrow 0.32*sq + outline, anim 150ms
-│   ├── coach_dashboard.py     # Eval bar vertical + BOARD header (was COACH DASHBOARD)
-│   ├── main_window.py         # 740×620 QMainWindow + heartbeat 2s + status Ready
-│   ├── eco_handler.py         # longest-prefix word-boundary 471 ECO
-│   ├── eco_data.py            # A00–E99 471 entries (B57 fixed Nc6)
-│   ├── pgn_handler.py         # board_to_pgn (Result header) / pgn_to_moves
-│   ├── promotion_dialog.py    # 320×88 72px buttons
-│   └── sound_manager.py       # WAV 60ms 600Hz (stealth: mute)
-├── static/                    # Web SPA 360px (was 420)
-│   ├── index.html             # 92vw, viewport scalable, stroke 1.8, head 3×3
-│   ├── css/chessboard.css     # chessboard.js 1.0.0 content-box (reverted from aspect-ratio)
-│   ├── js/                    # chess.js + chessboard.js + jquery
-│   └── img/chesspieces/wikipedia/ 12 PNG + sounds/move.wav
-├── tests/                     # 120 tests 5 modules (server/engine 0%)
-│   ├── test_config.py         # 14
-│   ├── test_eco.py            # 13
-│   ├── test_game_controller.py# 22
-│   ├── test_humanizer.py      # 27
-│   └── test_pgn_handler.py    # 19
-├── config.yaml                # engine/web_movetime 2.0 + humanizer 3 rates + display 8 colors (9 dead removed)
-├── pyproject.toml             # 0.1.0, deps pinned, ruff/black/mypy/pytest
-└── .github/workflows/ci.yml   # 8 jobs (6 matrix + lint + security)
+├── src/chess_coach/           # 14 modules (sound removed in v0.1.1)
+│   ├── __init__.py            # __version__ = "0.1.1", Humanizer/GameController exports
+│   ├── __main__.py            # CLI: desktop / web [port] [--local] [--version]
+│   ├── config.py              # validated YAML + CHESS_COACH_ENGINE + port/IP helpers
+│   ├── game_controller.py     # RLock board + turn ownership + validated undo/redo
+│   ├── engine_handler.py      # desktop UCI wrapper (QThread streaming)
+│   ├── server.py              # FastAPI 7 endpoints + locked LRU cache + history
+│   ├── humanizer.py           # modes + anti-detection picker (M1 forced)
+│   ├── chess_board.py         # PyQt6 board (DPR centering, edge arrow, drag polish)
+│   ├── coach_dashboard.py     # eval bar + labels
+│   ├── main_window.py         # QMainWindow: View menu, pin, modes, heartbeat
+│   ├── eco_handler.py / eco_data.py  # 509 ECO openings (count-pinned test)
+│   ├── pgn_handler.py         # board_to_pgn / pgn_to_moves / replay_moves
+│   └── promotion_dialog.py    # picker with Cancel + text fallback
+├── static/
+│   ├── index.html             # dependency-free SPA (~1100 lines vanilla JS)
+│   └── img/chesspieces/wikipedia/ 12 PNGs
+├── tests/                     # 194 tests (conftest.py shared client/engine fixtures)
+├── config.yaml                # validated ranges + humanizer.mode
+├── pyproject.toml             # 0.1.1 + MIT metadata
+├── Dockerfile / .dockerignore # non-root web image, python-probe healthcheck
+└── .github/workflows/ci.yml   # 6-way test matrix + pinned lint + security
 ```
 
 ---
 
 ## Overview
 
+One product rule everywhere: **the coach suggests only your color; opponent
+moves are copied in for sync.**
+
 ```mermaid
 graph TB
     subgraph User[Human]
         B[chess.com]
-        M[Enters move]
+        M[Enters every move]
     end
     subgraph Desktop[Desktop PyQt6]
         CB[ChessBoard]
@@ -52,209 +60,233 @@ graph TB
         EH[EngineHandler]
         HZ[Humanizer]
     end
-    subgraph Web[FastAPI]
-        FE[index.html 360px]
-        API[FastAPI]
+    subgraph Web[FastAPI + vanilla SPA]
+        FE[index.html]
+        API[7 endpoints]
     end
     subgraph Core[Shared]
-        GC[GameController]
-        ECO[ECO]
-        PGN[PGN]
+        GC[GameController RLock]
+        ECO[509 ECO]
+        PGN[PGN utils]
     end
     subgraph Engine[Stockfish 18]
-        SF[UCI]
+        SF[UCI MultiPV=5]
     end
     M --> B
     M --> CB
     M --> FE
-    CB --> MW --> GC --> EH --> SF --> HZ --> CB
+    CB --> MW --> GC
+    MW --> EH --> SF --> HZ --> CB
     FE --> API --> SF --> HZ --> FE
+    GC <--> ECO
+    GC <--> PGN
 ```
 
-<details><summary>ASCII</summary>
-
 ```
-Human -> chess.com (plays) -> Coach (manual entry)
-  ChessBoard/Web -> MainWindow/API -> GameController -> EngineHandler -> Stockfish -> Humanizer -> Arrow
+Human plays e2e4 on chess.com
+        |
+        v
+ ChessBoard (drag e2->e4)  OR  Web SPA (drag, pre-validated vs legal map)
+        |                      |
+        v                      v
+    MainWindow            FastAPI /api/human_move (+ copy fallback)
+        |                      |
+        +------> GameController (RLock, turn ownership) <------+
+                   |                |
+              Desktop             Web
+        EngineHandler        engine.analyse 2.0s (serialized)
+         QThread stream            |
+              \                    v
+               +--> Humanizer (mode + ELO + dice) --> Arrow + Eval
 ```
-
-</details>
 
 ---
 
-## Data Flow — One Human Turn
-
-```
-e2e4 on chess.com
-  -> drag e2->e4 on ChessBoard
-  -> mouseRelease validates legal, promotion dialog if needed, _start_piece_animation 150ms
-  -> move_made(Move) signal
-  -> MainWindow _on_move: stop_analysis, board.push, version++, move_list add, set_board, _update_feedback
-  -> run_analysis: _multi_pv={}, _human_move_selected=None, start_analysis(copy)
-  -> EngineHandler _launch_thread: AnalysisThread(multipv=5).start()
-  -> AnalysisThread.run: for info in engine.analysis(): emit(info)
-  -> MainWindow _on_analysis: accumulate MultiPV, humanizer.select_move(is_complex, eval), set_best_move(green arrow 0.32*sq), dashboard eval/pv
-```
+## Data Flow — One Human Turn (web)
 
 ```mermaid
 sequenceDiagram
     participant U as Human
-    participant CB as ChessBoard
-    participant MW as MainWindow
-    participant EH as EngineHandler
+    participant SPA as index.html
+    participant API as FastAPI
+    participant GC as GameController
     participant SF as Stockfish
-    U->>CB: drag
-    CB->>MW: move_made
-    MW->>EH: start_analysis
-    EH->>SF: analysis
-    loop
-        SF-->>MW: info
-        MW->>MW: humanizer
-    end
-    MW->>CB: arrow
+    participant HZ as Humanizer
+    U->>SPA: drag e2→e4
+    SPA->>SPA: local pre-check vs legal map (shake if illegal)
+    SPA->>API: POST /api/human_move
+    API->>GC: human_move() or copy_opponent_move()
+    GC-->>API: ok + fen + history + legal
+    API->>SF: analyse 2.0s (mate-safe, human POV)
+    SF-->>API: MultiPV 5
+    API->>HZ: select_move(mode)
+    HZ-->>API: humanized Move
+    API-->>SPA: coach + game_over + history + legal
+    SPA->>SPA: validated FEN → arrow + eval + PV
 ```
+
+```
+e2e4 on chess.com
+  -> drag e2->e4 in SPA
+  -> tryMove: local legality pre-check vs server `legal` map
+     (illegal => shake + toast, promotion dialog only if legal promo)
+  -> POST /api/human_move {move_uci} (+ promotion field if picked)
+  -> human_move() or copy_opponent_move() — single entry point
+  -> _build_response: game_over? (auto-only) -> history/last_move/legal
+  -> human turn? -> locked LRU cache or engine.analyse (serialized)
+     -> mate-safe eval in HUMAN POV -> humanizer.select_move(mode)
+  -> UnifiedResponse {coach{...}, game_over, history, legal}
+  -> SPA: validated FEN -> render -> defs-first SVG arrow + eval + PV
+```
+
+Desktop differs only in transport: `EngineHandler` streams
+`engine.analysis(multipv=5)` over `QThread` signals into
+`MainWindow._on_analysis` (version-guarded, 50ms-throttled), then the same
+`Humanizer` picks the move and `ChessBoard.set_best_move` draws the arrow.
 
 ---
 
 ## Module Deep Dives
 
 ### 1. `config.py`
-```
-config.yaml -> load_config() -> dict
-  checks engine exists, display hex str, arrow_opacity 0..1
-  find_free_port(start) binds 0.0.0.0 start or 0 -> TOCTOU race
-  get_local_ip() UDP 8.8.8.8:80 -> LAN IP
-```
-Dead 9 keys removed v0.1.0: `personality, aggression, classical, think_time, cpl_targets, detection, session, movetime, warmup`. `load_config` still ignores extra keys (tolerates old configs).
+`load_config()` validates: engine path non-empty (≤512 chars), threads/hash/
+multipv int ranges, `web_movetime` 0.05..30s, `humanizer.enabled` bool,
+`target_elo` 400..3000, `mode` enum, error rates 0..1, display hex `#RRGGBB`,
+opacity 0..1. `CHESS_COACH_ENGINE` env override (length-checked, logged).
+`get_local_ip()` closes its socket in `finally`. `find_free_port()` rejects
+bad ports (`OSError`) and reports the real ephemeral port for `0`.
 
 ### 2. `game_controller.py`
-```
-AWAITING_COLOR --start_game--> PLAYING --is_game_over--> GAME_OVER
-                                     \--is_fifty_moves/can_claim_draw (server only) --> idle
-```
-RLock protects `board, redo_stack, cached_coach/fen`. `record_move` pushes, clears redo, increments move_number if WHITE to move, sets GAME_OVER if `is_game_over()` (not fifty). `undo` pops -> redo_stack, `redo` pops forward. `human_move` via `Move.from_uci` + `legal_moves` check delegates to `record_move`. Deleted `get_san, is_human_turn` v0.1.0 (dead). `move_number` dead (MainWindow uses `len(move_stack)`).
+`AWAITING_COLOR --start_game--> PLAYING (--is_game_over--> GAME_OVER)`.
+`RLock` guards board/redo/cache fields.
+- `human_move()` enforces **turn ownership** (own side only).
+- `copy_opponent_move()` is the explicit sync path (opponent side only).
+- `redo()` re-validates against the live board (no blind pushes).
+- Server wraps check-and-mutate sequences in one lock (RLock nests safely).
 
-### 3. `engine_handler.py`
-```
-EngineHandler(QObject main)
-  start_engine: popen_uci + configure Hash/Threads + STARTF_USESHOWWINDOW
-  start_analysis(board): ping/restart, pending_board single slot, _launch_thread(snapshot)
-  AnalysisThread(QThread): with engine.analysis(multipv): for info: emit
-```
-Critical: `multipv` via param not setoption, `is_running` flag + `pending_board` queue 1, no `wait()` in `_stop_current_thread_async` (fixed wait added), `SimpleEngine` shared across threads (not thread-safe race).
+### 3. `server.py`
+- Engine singleton under `_engine_lock`; every `analyse()` serialized by
+  `_analyse_lock` (SimpleEngine is not thread-safe); lifespan quits under both.
+- `_analysis_cache` under `_cache_lock` (RLock), bounded 200 with oldest-drop;
+  stale-write guard re-checks FEN with a bounded retry loop (no recursion).
+- Mate-safe eval: `mate()` before `score()` (which is `None` on mate); cp
+  converted from side-to-move POV to **human POV**.
+- `_game_over_info()` ends games only on automatic terminations (mate,
+  stalemate, dead position, 75-move, fivefold); 50-move/threefold are
+  claimable → game continues with a notice.
+- Terminal results recorded once per position (`_web_result_fen`; new moves
+  re-arm, undo/redo replays don't double-count).
+- `_move_history` (UCI) + `last_move` + `legal` map ride every response, so
+  undo/redo/history/hints can never desync.
+- Validation: UCI regex + promotion allowlist in code (uniform `ok:false`);
+  mode normalized case-insensitively (`ok:false` on unknown); oversized
+  strings capped (422 only beyond caps); CORS scoped to localhost + RFC-1918
+  LAN; security headers (`nosniff`, `DENY` framing, no-referrer).
 
-### 4. `server.py`
-```
-GET /api/health -> engine_running
-POST /api/start_game {human_is_white} -> start_game + new_game + clear cache
-GET /api/game_state, POST /human_move {move_uci,promotion}, POST /undo, POST /redo -> _build_response
-_build_response: lock -> fen/mode -> is_human_turn? -> cache 200 clear() -> _run_coach_analysis_safe
-_run_coach_analysis_safe: engine.analyse 2.0s + humanizer + eco + eval_text + pv
-```
-Blocking `2.0s` per request, `_analysis_cache` dict global no lock, `rstrip` bug fixed to `uci[:4]+promo`, `thinking` single element, `move` field always None, CORS `*`, `0.0.0.0`.
+### 4. `humanizer.py`
+Modes: `human` (default jitter + error budget), `must_win` (pure best move),
+`safe` (blunder injector provably never fires — spy-tested). Forced mate-in-1
+(legality-checked). Blunders must land truly hanging (attacked AND
+undefended). `effective_elo` returns the jittered value. Session stats kept in
+a bounded rolling window.
 
-### 5. `humanizer.py`
-```mermaid
-flowchart TD
-    A[MultiPV] --> B[Rank]
-    B --> C[elo = progressive ±30 + complex 15..50 - winning 40..120]
-    C --> D{Roll}
-    D -->|0.005| E[blunder hanging]
-    D -->|0.03| F[mistake non-top3]
-    D -->|0.10| G[inaccuracy rank>=2 1/rank]
-    D -->|0.865| H[accuracy weighted]
-    E & F & G & H --> I[check mate==1 -> force]
-```
-Progressive `+20..50` 15% dip `-30..100` cap `+500`, Kaufman `acc=(ELO/100+64)/100`, top1 22% top3 55% at 1500. Fixed: blunder now hanging + sac, mate==1 forced, eco word-boundary.
+### 5. `chess_board.py` (desktop)
+- Piece scaling keyed by whole-pixel `(square, DPR)` buckets (no rescale
+  storm on resize); float `QPointF` centering (no truncation bias);
+  grab-offset pickup; subpixel drag position with 1px repaint throttle.
+- Dragged piece: 6% lift + soft shadow, clipped + clamped to the board.
+- ONE paint path for every frame (a drag-cache shortcut once blacked out
+  mid-drag frames — deleted; full fresh paint costs ~2-3ms and is always
+  coherent). Async `update()` (double-buffered, tear-free).
+- `grabMouse()` on pickup so off-window releases still snap back (no stuck
+  ghosts); engine UI throttled + change-gated so analysis never fights drags.
+- Arrow shortened to square edges with dark casing + bright core.
+- `WA_OpaquePaintEvent` (no background flash); mouse events null-guarded;
+  `set_board(board, clear_arrow=...)` kills flicker.
 
-### 6. `chess_board.py`
-```
-paintEvent: _draw_board_bg(_draw_squares(last_move) + _draw_highlights(check) + _draw_legal_moves(dots/rings) + _draw_pieces(scaled DPR) + _draw_coordinates(a-h/1-8) + _draw_best_move_arrow(outline+1.8px line + 0.32*sq head + outline) + _draw_animation(eased)
-Mouse: press-> drag piece + legal squares + cache pixmap, move-> track, release-> validate legal + promotion dialog -> _start_piece_animation 150ms eased 1-(1-t)² -> emit
-```
-Fixed DPR `*dpr` + `setDevicePixelRatio`, min `280`, arrow `0.32*sq` + dark outline.
+### 6. `main_window.py`
+Batched repaints (`setUpdatesEnabled` + explicit update, exception-safe),
+version-guarded streaming analysis, heartbeat restart, `_eval_seen` (no false
+BLUNDER on move 1), animation guards on undo/redo/new/analysis-board (no
+phantom moves), New-Cancel aborts safely, redo uses SAN-only stack entries,
+close stops the worker *before* `engine.quit()`, engine errors modal-once
+then status-bar, pin via native `SetWindowPos` (typed ctypes, self-HWND,
+Qt-flag only when hidden, both cleared on unpin), `Ctrl+T` View menu
+(File menu removed), live mode buttons, claimable-draw notices.
 
-### 7. `main_window.py`
-```
-Signals: ChessBoard.move_made -> _on_move -> run_analysis
-         EngineHandler.analysis_update -> _on_analysis (version check, MultiPV, humanizer, dashboard)
-         error -> QMessageBox
-Timers: heartbeat 2s -> if !received && !can_show_coach -> restart
-State: position_version, analyzing_version_id, _multi_pv, _multi_pv_depth, _human_move_selected (anti-flicker once per pos), redo_stack tuple(Move,san)
-```
-Fixed `740×620 min 380×520`, `BOARD` header, `Ready` status, `740` not `1100`, arrow outline.
+### 7. `static/index.html` (web SPA, zero dependencies)
+Vanilla JS: grid board with PNG pieces, pointer drag + tap (tap own piece
+re-selects), validated fail-closed FEN parser, server `legal` map adopted per
+response (pseudo-hints incl. castling/EP only as pre-game fallback), geometric
+check detection, defs-first SVG arrow with casing/insets (flip-invariant),
+explicit server `game_over` handling + rematch modal, claimable-draw notice,
+server-adopted history, Copy Moves/FEN with legacy clipboard fallback,
+flip (drag-guarded), hint toggle (`aria-pressed`), mini pin mode (`?mini=1`,
+localStorage, overflow-fixed), promotion dialog with Cancel/backdrop/re-check,
+mode pills with busy-guard (no desync), New-Cancel, 15s timeouts + resync,
+server-message error surfacing, keyboard shortcuts, aria labels, focus rings,
+reduced-motion support.
 
-### 8. `eco_handler.py` / `eco_data.py`
-Longest-prefix word-boundary: `move_words[:len(prefix_words)]==prefix_words`. 471 entries A00-E99, B57 fixed `Nf6 Nc3 Bc4` -> `Nf6 Nc3 Nc6 Bc4`.
-
-### 9. `pgn_handler.py`
-`board_to_pgn: Game.from_board + StringExporter` needs `Result` header fix, `pgn_to_moves: read_game -> variations[0]` mainline only, `replay_moves: copy + legal check`.
-
-### 10. `sound_manager.py`
-WAV `22050Hz 600Hz 60ms decay 0.6` + `QSoundEffect 0.5` volume. Stealth: mute.
+### 8. `eco_handler.py` / `eco_data.py` / `pgn_handler.py`
+509 pinned ECO entries (A00–E99), longest-prefix word-boundary match; PGN
+parse/export utilities with mainline handling. Tested, unchanged logic in
+v0.1.1.
 
 ---
 
 ## Concurrency
 
 ```
-Desktop: MainThread Qt loop -> EngineHandler -> AnalysisThread QThread -> engine.analysis stream -> queued signal
-Web: uvicorn threadpool -> lock -> engine.analyse sync 2.0s (blocks)
-GC lock RLock, server cache dict no lock, engine shared race
+Desktop: Qt main loop -> EngineHandler -> AnalysisThread -(queued)-> MainWindow
+Web:     uvicorn workers -> game_controller.lock (state, incl. read-then-act)
+                            _engine_lock (lifecycle) + _analyse_lock (analyse)
+                            _cache_lock (LRU cache)
 ```
 
-```mermaid
-flowchart LR
-    A[Request] --> B[GC.lock]
-    B --> C[engine.analyse]
-    C --> D[cache]
-```
-
----
-
-## CI
-
-```mermaid
-flowchart LR
-    A[push] --> B[Actions]
-    B --> C[test 6 matrix]
-    B --> D[lint ruff+black+mypy]
-    B --> E[security bandit+pip-audit]
-    C --> C1[ubuntu 3.10] & C2[ubuntu 3.11] & C3[ubuntu 3.12] & C4[windows 3.10] & C5[windows 3.11] & C6[windows 3.12]
-```
-
-ASCII: `push -> test(ubuntu/windows × 3.10/11/12) + lint(ruff/black/mypy) + security(bandit/pip-audit)`
+Lock order is always state → engine/analyse → cache; no path inverts it.
+Cache helpers use RLock after the v0.1.1 test-suite deadlock saga proved
+plain-Lock self-deadlock (`with _cache_lock: _reset_for_tests()` hung the
+whole suite — now a regression lesson, not just a fix).
 
 ---
 
 ## API
 
 ```
-POST /api/start_game {human_is_white} -> UnifiedResponse {ok,mode,fen,coach{best_move,eval,pv,depth,opening,label,eval_color,thinking}}
-POST /api/human_move {move_uci,promotion?} -> UnifiedResponse
-GET /api/game_state -> UnifiedResponse
-POST /api/undo, /api/redo -> UnifiedResponse
+POST /api/start_game {human_is_white, mode?} -> UnifiedResponse
+GET  /api/game_state                          -> UnifiedResponse
+GET  /api/health                              -> {status, engine_running}
+POST /api/human_move {move_uci, promotion?}   -> UnifiedResponse
+POST /api/mode {mode}                         -> UnifiedResponse
+POST /api/undo                                -> UnifiedResponse
+POST /api/redo                                -> UnifiedResponse
 ```
+
+`UnifiedResponse {ok, mode: coach|idle, fen, move: null, coach{best_move,
+eval, pv, depth, opening, label, eval_color, thinking, mode}, game_over,
+history, last_move, legal, error}`.
 
 ---
 
 ## Security
 
-| Aspect | Impl |
-|--------|------|
-| CORS | `*` LAN only — restrict if public |
-| Engine | `config.yaml` CWD fallback |
-| FEN | `chess.Board(fen)` ValueError caught |
-| Input | Pydantic, `uci[:4]+promo` fixed |
-| Config | `yaml.safe_load` |
-| Static | `_NoCacheStaticFiles` no-cache |
+| Aspect | v0.1.1 |
+|--------|--------|
+| Auth | none (LAN tool) — `--local` flag binds 127.0.0.1 only |
+| CORS | localhost + RFC-1918 LAN origins, GET+POST, Content-Type |
+| Input | UCI regex, promotion allowlist, mode normalization, size caps |
+| Errors | generic client messages, traces server-side only |
+| Engine | singleton + serialized analyse, validated config ranges |
+| FEN | never accepted from clients (output only) |
+| YAML | `safe_load` + full schema validation |
+| Headers | nosniff, DENY framing, no-referrer |
+| Supply | non-root Docker user, pinned CI tools, no secrets in repo/image |
 
 ---
 
-## Version
+## Version / License
 
-**0.1.0** — `pyproject.toml`, `__init__.py`, `__main__.py`, `README.md`, `ARCHITECTURE.md` single source. Previous `1.0.1` archived. Local only, no push until user approves.
+**0.1.1** — `pyproject.toml`, `__init__.py`, `--version` flag
+(`__main__` docstring mirrors it).
 
-## License
-
-MIT
+MIT — see [LICENSE](LICENSE).

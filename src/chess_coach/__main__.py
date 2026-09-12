@@ -1,9 +1,11 @@
-"""Chess Coach v0.1.0 — Real-time chess analysis sidekick.
+"""Chess Coach v0.1.1 — Real-time chess analysis sidekick.
 
 Usage:
-  python -m chess_coach          Desktop GUI mode
-  python -m chess_coach web      Web server mode (http://localhost:8000)
-  python -m chess_coach web 8080 Web server on custom port
+  python -m chess_coach                 Desktop GUI mode
+  python -m chess_coach web             Web server, LAN (http://localhost:8000)
+  python -m chess_coach web 8012        Web server on custom port
+  python -m chess_coach web --local     Web server, localhost only (no LAN)
+  python -m chess_coach --version       Print version
 """
 
 from __future__ import annotations
@@ -36,6 +38,14 @@ def main() -> None:
         print(__doc__)
         return
 
+    if "-v" in args or "--version" in args:
+        try:
+            from chess_coach import __version__
+        except Exception:
+            __version__ = "unknown"
+        print(f"chess-coach {__version__}")
+        return
+
     if "web" in args or "server" in args or "--web" in args:
         mode = "web"
 
@@ -57,8 +67,17 @@ def main() -> None:
             if a.isdigit():
                 port = int(a)
                 break
+        if not 1 <= port <= 65535:
+            print(f"Invalid port {port!r} — must be 1..65535, using 8000")
+            port = 8000
+        local_only = "--local" in args or "localhost" in args
+        host = "127.0.0.1" if local_only else "0.0.0.0"
 
-        sock, port = find_free_port(port)
+        try:
+            sock, port = find_free_port(port)
+        except OSError as e:
+            print(f"Could not bind port {port}: {e}")
+            return
         sock.close()
         local_ip = get_local_ip()
 
@@ -67,18 +86,22 @@ def main() -> None:
         print("  Chess Coach Web Server is running!")
         print("=" * 50)
         print(f"  PC:  http://localhost:{port}")
-        print(f"  Phone:  http://{local_ip}:{port}")
+        if local_only:
+            print("  (localhost only — LAN/phone disabled)")
+        else:
+            print(f"  Phone:  http://{local_ip}:{port}")
         print("=" * 50)
-        print("  Phone not working? Make sure:")
-        print("  1. Phone is on the SAME WiFi as this PC")
-        print(f"  2. Windows Firewall allows port {port}")
-        print("     -> Run this in PowerShell (as admin):")
-        print(
-            f'     New-NetFirewallRule -DisplayName "Chess Coach" -Direction Inbound -Protocol TCP -LocalPort {port} -Action Allow'
-        )
-        print("=" * 50)
-        print()
-        uvicorn.run(app, host="0.0.0.0", port=port, log_level="warning")
+        if not local_only:
+            print("  Phone not working? Make sure:")
+            print("  1. Phone is on the SAME WiFi as this PC")
+            print(f"  2. Firewall allows port {port} (Windows admin PS:")
+            print(
+                f'     New-NetFirewallRule -DisplayName "Chess Coach" -Direction Inbound -Protocol TCP -LocalPort {port} -Action Allow'
+            )
+            print("     Linux: sudo ufw allow {}/tcp".format(port))
+            print("=" * 50)
+            print()
+        uvicorn.run(app, host=host, port=port, log_level="warning")
 
 
 if __name__ == "__main__":

@@ -12,12 +12,11 @@ from PyQt6.QtGui import (
     QFont,
     QPixmap,
     QPainterPath,
-    QResizeEvent,
     QPaintEvent,
     QMouseEvent,
     QCursor,
 )
-from PyQt6.QtCore import Qt, QRectF, pyqtSignal, QPoint, QPointF, QTimer, QElapsedTimer
+from PyQt6.QtCore import Qt, QRectF, pyqtSignal, QPointF, QTimer, QElapsedTimer
 
 import chess
 
@@ -72,14 +71,18 @@ class ChessBoard(QWidget):
         self.board = chess.Board()
         self.dragged_piece: chess.Piece | None = None
         self.dragged_square: int | None = None
-        self.drag_start_pos: QPoint | None = None
-        self.mouse_pos = QPoint()
+        self.mouse_pos = QPointF()
+        self._last_drag_paint = QPointF()
         self.setMouseTracking(True)
         self.setMinimumSize(280, 280)
+        # Opaque: we fill the whole rect on every paint path, so Qt must not
+        # clear/flash the background first (kills resize flicker). NOTE: no
+        # WA_NoSystemBackground — with it, any missed region sticks BLACK;
+        # without it the backing store preserves old pixels instead.
+        self.setAttribute(Qt.WidgetAttribute.WA_OpaquePaintEvent, True)
 
         self.flipped = False
         self.playable_side: chess.Color | None = None
-        self.drag_cache: QPixmap | None = None
         self.best_move: chess.Move | None = None
         self.last_move_squares: list[int] = []
         self.check_square: int | None = None
@@ -109,7 +112,8 @@ class ChessBoard(QWidget):
 
         self.raw_pieces: dict[str, QPixmap] = {}
         self.scaled_pieces: dict[str, QPixmap] = {}
-        self.current_scale: float = 0
+        self.current_scale: tuple[int, int] = (0, 0)
+        self._grab_offset: QPointF | None = None
         self._load_piece_images()
 
         self._anim_progress: float = 0.0
@@ -134,14 +138,16 @@ class ChessBoard(QWidget):
         return color + PIECE_TYPES[piece.piece_type]
 
     def _scale_pieces(self, square_size: float) -> None:
-        if square_size == self.current_scale:
-            return
-        self.current_scale = square_size
-        self.scaled_pieces = {}
         dpr = self.devicePixelRatioF() if hasattr(self, "devicePixelRatioF") else 1.0
-        size = int(square_size * 0.88 * dpr)
-        size = max(16, size)
-        for key, pix in self.raw_pieces.items():
+        # Whole-pixel buckets: live resize changes sq continuously; rescaling
+        # 12 pixmaps per sub-pixel step caused the resize lag/jitter.
+        key = (round(square_size), round(dpr * 100))
+        if key == self.current_scale:
+            return
+        self.current_scale = key
+        self.scaled_pieces = {}
+        size = max(16, round(square_size * 0.88 * dpr))
+        for key2, pix in self.raw_pieces.items():
             scaled = pix.scaled(
                 size,
                 size,
@@ -150,18 +156,25 @@ class ChessBoard(QWidget):
             )
             if dpr != 1.0:
                 scaled.setDevicePixelRatio(dpr)
-            self.scaled_pieces[key] = scaled
+            self.scaled_pieces[key2] = scaled
 
-    def resizeEvent(self, event: QResizeEvent | None) -> None:
-        self.drag_cache = None
-        super().resizeEvent(event)
+    def _piece_logical_size(self, pix: QPixmap) -> tuple[float, float]:
+        dpr = self.devicePixelRatioF() if hasattr(self, "devicePixelRatioF") else 1.0
+        if dpr and dpr != 1.0:
+            return pix.width() / dpr, pix.height() / dpr
+        return float(pix.width()), float(pix.height())
 
-    def set_board(self, board: chess.Board) -> None:
+    def set_board(self, board: chess.Board, clear_arrow: bool = True) -> None:
+        try:
+            self.releaseMouse()
+        except Exception:
+            pass
         self.board = board
-        self.best_move = None
+        if clear_arrow:
+            self.best_move = None
         self.dragged_piece = None
         self.dragged_square = None
-        self.drag_cache = None
+        self._grab_offset = None
         self._update_board_state()
         self.update()
 
@@ -183,10 +196,6 @@ class ChessBoard(QWidget):
 
     def set_flipped(self, flipped: bool) -> None:
         self.flipped = flipped
-        self.update()
-
-    def set_legal_moves(self, squares: list[int]) -> None:
-        self.legal_move_squares = squares
         self.update()
 
     def _board_coords(self, pos: QPointF) -> tuple[int | None, int | None, float, float, float]:
@@ -215,6 +224,10 @@ class ChessBoard(QWidget):
         return f, 7 - r
 
     def paintEvent(self, event: QPaintEvent | None) -> None:
+        # ONE path for every frame (static, drag, animation): the old
+        # drag-cache shortcut could blit a stale/short/transparent pixmap and
+        # black out the board mid-drag. A full fresh paint costs ~2-3ms and
+        # is always coherent — exactly what the static board already proves.
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
@@ -223,11 +236,6 @@ class ChessBoard(QWidget):
         sq = size / 8
         ox = (self.width() - size) / 2
         oy = (self.height() - size) / 2
-
-        if self.dragged_piece and self.drag_cache and self._pending_move is None:
-            painter.drawPixmap(0, 0, self.drag_cache)
-            self._draw_dragged_piece(painter, sq)
-            return
 
         self._draw_board_bg(painter, size, ox, oy)
         self._draw_squares(painter, sq, ox, oy)
@@ -239,7 +247,7 @@ class ChessBoard(QWidget):
         self._draw_animation(painter, sq, ox, oy)
 
         if self.dragged_piece and self._pending_move is None:
-            self._draw_dragged_piece(painter, sq)
+            self._draw_dragged_piece(painter, sq, ox, oy)
 
     def _draw_board_bg(self, painter: QPainter, size: float, ox: float, oy: float) -> None:
         painter.fillRect(self.rect(), QColor(COLORS["bg"]))
@@ -297,22 +305,53 @@ class ChessBoard(QWidget):
                     key = self._get_piece_key(piece)
                     pix = self.scaled_pieces.get(key)
                     if pix:
-                        x = ox + col * sq + (sq - pix.width()) / 2
-                        y = oy + row * sq + (sq - pix.height()) / 2
-                        painter.drawPixmap(int(x), int(y), pix)
+                        lw, lh = self._piece_logical_size(pix)
+                        x = ox + col * sq + (sq - lw) / 2.0
+                        y = oy + row * sq + (sq - lh) / 2.0
+                        painter.drawPixmap(QPointF(x, y), pix)
 
-    def _draw_dragged_piece(self, painter: QPainter, sq: float) -> None:
+    def _draw_dragged_piece(
+        self, painter: QPainter, sq: float, ox: float = 0.0, oy: float = 0.0
+    ) -> None:
         if not self.dragged_piece:
             return
         self._scale_pieces(sq)
         key = self._get_piece_key(self.dragged_piece)
         pix = self.scaled_pieces.get(key)
         if pix:
-            x = self.mouse_pos.x() - pix.width() / 2
-            y = self.mouse_pos.y() - pix.height() / 2
-            painter.setOpacity(0.85)
-            painter.drawPixmap(int(x), int(y), pix)
-            painter.setOpacity(1.0)
+            lw, lh = self._piece_logical_size(pix)
+            if self._grab_offset is not None:
+                x = self.mouse_pos.x() - self._grab_offset.x()
+                y = self.mouse_pos.y() - self._grab_offset.y()
+            else:
+                x = self.mouse_pos.x() - lw / 2.0
+                y = self.mouse_pos.y() - lh / 2.0
+            # Clamp the dragged piece inside the widget: an off-board cursor
+            # must never spray ghosts outside the board area.
+            size = min(self.width(), self.height())
+            if size > 0:
+                x = min(max(x, -lw / 2.0), self.width() - lw / 2.0)
+                y = min(max(y, -lh / 2.0), self.height() - lh / 2.0)
+            # Clip strictly to the board square area as well.
+            painter.save()
+            if size > 0:
+                painter.setClipRect(QRectF(ox, oy, size, size))
+            # Lift + soft shadow: hides edge tearing and reads as "picked up".
+            lift = 1.06
+            dw, dh = lw * lift, lh * lift
+            painter.setOpacity(0.35)
+            painter.drawPixmap(
+                QRectF(x + (lw - dw) / 2.0 + 2.0, y + (lh - dh) / 2.0 + 4.0, dw, dh),
+                pix,
+                QRectF(0, 0, pix.width(), pix.height()),
+            )
+            painter.setOpacity(0.95)
+            painter.drawPixmap(
+                QRectF(x + (lw - dw) / 2.0, y + (lh - dh) / 2.0, dw, dh),
+                pix,
+                QRectF(0, 0, pix.width(), pix.height()),
+            )
+            painter.restore()
 
     def _draw_coordinates(self, painter: QPainter, sq: float, ox: float, oy: float) -> None:
         font = QFont("Segoe UI", int(sq * 0.12))
@@ -354,7 +393,6 @@ class ChessBoard(QWidget):
         self._anim_pix = self.scaled_pieces.get(key) if key else None
         self._anim_progress = 0.0
         self._pending_move = move
-        self.drag_cache = None
         self._anim_timer.start(16)
         self._anim_elapsed.start()
 
@@ -372,7 +410,6 @@ class ChessBoard(QWidget):
             self._pending_move = None
             self.dragged_piece = None
             self.dragged_square = None
-            self.drag_start_pos = None
             if move:
                 self.move_made.emit(move)
 
@@ -385,11 +422,10 @@ class ChessBoard(QWidget):
         x2, y2 = self._anim_to_xy
         cx = x1 + (x2 - x1) * eased
         cy = y1 + (y2 - y1) * eased
-        pw = self._anim_pix.width()
-        ph = self._anim_pix.height()
+        lw, lh = self._piece_logical_size(self._anim_pix)
         painter.save()
         painter.setOpacity(0.9)
-        painter.drawPixmap(int(cx - pw / 2), int(cy - ph / 2), self._anim_pix)
+        painter.drawPixmap(QPointF(cx - lw / 2.0, cy - lh / 2.0), self._anim_pix)
         painter.restore()
 
     def _draw_best_move_arrow(self, painter: QPainter, sq: float, ox: float, oy: float) -> None:
@@ -397,41 +433,57 @@ class ChessBoard(QWidget):
             return
         vcol1, vrow1 = self._to_visual(self.best_move.from_square)
         vcol2, vrow2 = self._to_visual(self.best_move.to_square)
-        x1 = ox + vcol1 * sq + sq / 2
-        y1 = oy + vrow1 * sq + sq / 2
-        x2 = ox + vcol2 * sq + sq / 2
-        y2 = oy + vrow2 * sq + sq / 2
-        # outline for visibility on any square color + stealth-friendly thin
-        line_w = max(2.5, sq * 0.11)
-        outline = QPen(QColor(0, 0, 0, 70), line_w + 3)
-        outline.setCapStyle(Qt.PenCapStyle.RoundCap)
-        painter.setPen(outline)
-        painter.drawLine(QPointF(x1, y1), QPointF(x2, y2))
+        x1 = ox + vcol1 * sq + sq / 2.0
+        y1 = oy + vrow1 * sq + sq / 2.0
+        x2 = ox + vcol2 * sq + sq / 2.0
+        y2 = oy + vrow2 * sq + sq / 2.0
+        dx, dy = x2 - x1, y2 - y1
+        length = math.hypot(dx, dy)
+        if length < 1e-6:
+            return
+        ux, uy = dx / length, dy / length
+        # Shorten shaft so head sits on square edge, not buried under the piece
+        head_len = max(12.0, sq * 0.30)
+        inset_start = sq * 0.26
+        inset_end = sq * 0.28 + head_len * 0.9
+        sx, sy = x1 + ux * inset_start, y1 + uy * inset_start
+        ex, ey = x2 - ux * inset_end, y2 - uy * inset_end
+        line_w = max(3.0, min(6.0, sq * 0.07))
+        # casing (dark, opaque) then core (bright) for contrast on any square
+        casing = QPen(QColor(11, 14, 20, 200), line_w + 2.5)
+        casing.setCapStyle(Qt.PenCapStyle.RoundCap)
+        painter.setPen(casing)
+        painter.drawLine(QPointF(sx, sy), QPointF(ex, ey))
         pen = QPen(self.arrow_color, line_w)
         pen.setCapStyle(Qt.PenCapStyle.RoundCap)
         painter.setPen(pen)
-        painter.drawLine(QPointF(x1, y1), QPointF(x2, y2))
-        angle = math.atan2(y2 - y1, x2 - x1)
-        asz = max(14, sq * 0.32)
-        p1 = QPointF(x2, y2)
-        p2 = QPointF(x2 - asz * math.cos(angle - 0.5), y2 - asz * math.sin(angle - 0.5))
-        p3 = QPointF(x2 - asz * math.cos(angle + 0.5), y2 - asz * math.sin(angle + 0.5))
-        # arrow head with dark outline for visibility
-        outline_head = QColor(0, 0, 0, 90)
-        painter.setBrush(outline_head)
+        painter.drawLine(QPointF(sx, sy), QPointF(ex, ey))
+        angle = math.atan2(uy, ux)
+        half = 0.42
+        p1 = QPointF(ex + ux * head_len * 0.15, ey + uy * head_len * 0.15)
+        p2 = QPointF(
+            ex - head_len * math.cos(angle - half),
+            ey - head_len * math.sin(angle - half),
+        )
+        p3 = QPointF(
+            ex - head_len * math.cos(angle + half),
+            ey - head_len * math.sin(angle + half),
+        )
         painter.setPen(Qt.PenStyle.NoPen)
-        # slightly larger outline polygon
-        op1 = QPointF(x2, y2)
-        oas = asz + 4
-        op2 = QPointF(x2 - oas * math.cos(angle - 0.5), y2 - oas * math.sin(angle - 0.5))
-        op3 = QPointF(x2 - oas * math.cos(angle + 0.5), y2 - oas * math.sin(angle + 0.5))
-        painter.drawPolygon([op1, op2, op3])  # type: ignore[arg-type, call-overload]
-        painter.setBrush(self.arrow_color)
-        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor(11, 14, 20, 200))
         painter.drawPolygon([p1, p2, p3])  # type: ignore[arg-type, call-overload]
+        # shrink core head slightly so casing rims it
+        cxp = (p1.x() + p2.x() + p3.x()) / 3.0
+        cyp = (p1.y() + p2.y() + p3.y()) / 3.0
+        shrink = 0.82
+        q1 = QPointF(cxp + (p1.x() - cxp) * shrink, cyp + (p1.y() - cyp) * shrink)
+        q2 = QPointF(cxp + (p2.x() - cxp) * shrink, cyp + (p2.y() - cyp) * shrink)
+        q3 = QPointF(cxp + (p3.x() - cxp) * shrink, cyp + (p3.y() - cyp) * shrink)
+        painter.setBrush(self.arrow_color)
+        painter.drawPolygon([q1, q2, q3])  # type: ignore[arg-type, call-overload]
 
     def mousePressEvent(self, event: QMouseEvent | None) -> None:
-        if event.button() != Qt.MouseButton.LeftButton:
+        if event is None or event.button() != Qt.MouseButton.LeftButton:
             return
         if self.board.is_game_over():
             return
@@ -439,7 +491,7 @@ class ChessBoard(QWidget):
             return
         pos = event.position()
         col, row, sq, ox, oy = self._board_coords(pos)
-        if col is None:
+        if col is None or row is None:
             return
         square = self._to_square(col, row)
         piece = self.board.piece_at(square)
@@ -448,34 +500,45 @@ class ChessBoard(QWidget):
                 return
             self.dragged_piece = piece
             self.dragged_square = square
-            self.drag_start_pos = pos.toPoint()
-            self.mouse_pos = pos.toPoint()
+            self.mouse_pos = QPointF(pos)
+            self._last_drag_paint = QPointF(pos)
+            # Grab offset so piece doesn't jump to cursor-center on pickup
+            size = min(self.width(), self.height())
+            sq2 = size / 8
+            ox2 = (self.width() - size) / 2
+            oy2 = (self.height() - size) / 2
+            vcol, vrow = self._to_visual(square)
+            sq_tl_x = ox2 + vcol * sq2
+            sq_tl_y = oy2 + vrow * sq2
+            self._grab_offset = QPointF(pos.x() - sq_tl_x, pos.y() - sq_tl_y)
             self.legal_move_squares = [
                 m.to_square for m in self.board.legal_moves if m.from_square == square
             ]
-            self.drag_cache = QPixmap(self.size())
-            self.drag_cache.fill(Qt.GlobalColor.transparent)
-            tmp = QPainter(self.drag_cache)
-            tmp.setRenderHint(QPainter.RenderHint.Antialiasing)
-            tmp.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
-            sz = min(self.width(), self.height())
-            sq2 = sz / 8
-            ox2 = (self.width() - sz) / 2
-            oy2 = (self.height() - sz) / 2
-            self._draw_board_bg(tmp, sz, ox2, oy2)
-            self._draw_squares(tmp, sq2, ox2, oy2)
-            self._draw_highlights(tmp, sq2, ox2, oy2)
-            self._draw_pieces(tmp, sq2, ox2, oy2)
-            tmp.end()
+            # Grab the mouse: releases outside the window/board still reach
+            # mouseReleaseEvent. Without this, an off-window release leaves
+            # dragged_piece stuck forever (permanent ghost glitch).
+            try:
+                self.grabMouse()
+            except Exception:
+                pass
             self.update()
 
     def mouseMoveEvent(self, event: QMouseEvent | None) -> None:
+        if event is None:
+            return
         if self.dragged_piece:
-            self.mouse_pos = event.position().toPoint()
-            self.update()
+            self.mouse_pos = QPointF(event.position())
+            # Async update(), NOT repaint(): synchronous repaint() tears on
+            # Windows (half-old/half-new frames like black bottom strips).
+            # update() is double-buffered; the 1px gate bounds its rate.
+            dx = self.mouse_pos.x() - self._last_drag_paint.x()
+            dy = self.mouse_pos.y() - self._last_drag_paint.y()
+            if dx * dx + dy * dy >= 1.0:
+                self._last_drag_paint = QPointF(self.mouse_pos)
+                self.update()
             return
         col, row, _sq, _ox, _oy = self._board_coords(event.position())
-        if col is not None and not self.board.is_game_over():
+        if col is not None and row is not None and not self.board.is_game_over():
             square = self._to_square(col, row)
             piece = self.board.piece_at(square)
             if piece and (self.playable_side is None or piece.color == self.playable_side):
@@ -484,11 +547,16 @@ class ChessBoard(QWidget):
         self.setCursor(QCursor(Qt.CursorShape.ArrowCursor))
 
     def mouseReleaseEvent(self, event: QMouseEvent | None) -> None:
-        if not self.dragged_piece:
+        if not self.dragged_piece or event is None:
             return
+        try:
+            self.releaseMouse()
+        except Exception:
+            pass
         col, row, sq, ox, oy = self._board_coords(event.position())
         self.legal_move_squares = []
-        if col is not None:
+        self._grab_offset = None
+        if col is not None and row is not None:
             target = self._to_square(col, row)
 
             legal = [
@@ -499,8 +567,6 @@ class ChessBoard(QWidget):
             if not legal:
                 self.dragged_piece = None
                 self.dragged_square = None
-                self.drag_cache = None
-                self.drag_start_pos = None
                 self.update()
                 return
 
@@ -515,8 +581,6 @@ class ChessBoard(QWidget):
                 else:
                     self.dragged_piece = None
                     self.dragged_square = None
-                    self.drag_cache = None
-                    self.drag_start_pos = None
                     self.update()
                     return
 
@@ -524,6 +588,4 @@ class ChessBoard(QWidget):
             return
         self.dragged_piece = None
         self.dragged_square = None
-        self.drag_cache = None
-        self.drag_start_pos = None
         self.update()

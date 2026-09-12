@@ -11,7 +11,6 @@ from chess_coach.humanizer import (
     _accuracy_for_elo,
     _top1_rate_for_elo,
     _top3_cumulative_for_elo,
-    _expected_score,
 )
 
 
@@ -36,10 +35,6 @@ class TestAccuracyCalibration:
     def test_top3_always_greater_than_top1(self):
         for elo in [800, 1200, 1500, 2000, 2500]:
             assert _top3_cumulative_for_elo(elo) > _top1_rate_for_elo(elo)
-
-    def test_expected_score(self):
-        assert _expected_score(1500, 1500) == pytest.approx(0.5, abs=0.01)
-        assert _expected_score(2000, 1500) > 0.90
 
 
 class TestSessionMetrics:
@@ -181,7 +176,7 @@ class TestHumanizerV3:
         top1_pct = counts.get("e2e4", 0) / 5
         assert top1_pct >= 45
 
-    def test_time_pressure_increases_errors(self):
+    def test_complexity_increases_errors(self):
         h = Humanizer({"humanizer": {"target_elo": 1500}})
         board = chess.Board()
         candidates = [
@@ -243,12 +238,6 @@ class TestHumanizerV3:
             seen.add(move.uci())
         assert "e2e4" in seen
 
-    def test_new_game_resets_move_count(self):
-        h = Humanizer({})
-        h._move_count = 42
-        h.new_game()
-        assert h._move_count == 0
-
     def test_new_game_progressive_elo_climbs(self):
         h = Humanizer({"humanizer": {"target_elo": 1500}})
         elos = []
@@ -305,18 +294,11 @@ class TestHumanizerV3:
         normal_top1 = normal.get("e2e4", 0) / 5
         assert win_top1 < normal_top1 + 10
 
-    def test_risk_assessment_safe_initially(self):
-        h = Humanizer({})
-        risk = h.get_risk_assessment()
-        assert risk["level"] == "SAFE"
-        assert risk["games"] == 0
-
     def test_record_result(self):
         h = Humanizer({})
         h.record_result("win", 0.82)
-        risk = h.get_risk_assessment()
-        assert risk["games"] == 1
-        assert risk["win_rate"] == 1.0
+        assert h._session.games_played == 1
+        assert h._session.wins == 1
 
 
 class TestComplexityDetector:
@@ -333,9 +315,3 @@ class TestComplexityDetector:
     def test_endgame_not_complex(self):
         board = chess.Board("4k3/8/8/8/8/8/4P3/4K3 w - - 0 1")
         assert not ComplexityDetector.is_complex(board)
-
-    def test_time_pressure_below_60_seconds(self):
-        assert ComplexityDetector.is_time_pressure(30.0)
-
-    def test_no_time_pressure_above_60_seconds(self):
-        assert not ComplexityDetector.is_time_pressure(180.0)

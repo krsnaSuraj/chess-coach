@@ -14,10 +14,10 @@ from PyQt6.QtWidgets import (
     QPushButton,
     QInputDialog,
     QMenu,
-    QFileDialog,
+    QAbstractItemView,
 )
 from PyQt6.QtGui import QShortcut, QKeySequence, QAction, QCloseEvent
-from PyQt6.QtCore import QTimer
+from PyQt6.QtCore import QTimer, Qt, QSettings
 
 import chess
 from chess_coach.config import load_config
@@ -25,9 +25,7 @@ from chess_coach.chess_board import ChessBoard, COLORS
 from chess_coach.coach_dashboard import CoachDashboard
 from chess_coach.eco_handler import get_opening
 from chess_coach.engine_handler import EngineHandler
-from chess_coach.humanizer import Humanizer, ComplexityDetector
-from chess_coach.sound_manager import SoundManager
-from chess_coach.pgn_handler import board_to_pgn, pgn_to_moves
+from chess_coach.humanizer import Humanizer, ComplexityDetector, _accuracy_for_elo
 
 logger = logging.getLogger(__name__)
 
@@ -35,15 +33,24 @@ logger = logging.getLogger(__name__)
 class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle("Chess Coach")
+        try:
+            from chess_coach import __version__
+
+            self.setWindowTitle(f"Chess Coach v{__version__}")
+        except Exception:
+            self.setWindowTitle("Chess Coach")
         self.resize(740, 620)
         self.setMinimumSize(380, 520)
 
         self.config = load_config()
         self.board = chess.Board()
 
-        self.user_color = self._select_color()
+        # Startup: ask color like before (Cancel/close falls back to White
+        # so the app never bricks with user_color=None).
+        picked = self._select_color()
+        self.user_color: chess.Color = picked if picked is not None else chess.WHITE
         self.board_flipped = self.user_color == chess.BLACK
+        self._engine_error_shown = False
 
         self.engine_handler = EngineHandler(self.config)
         self.engine_handler.analysis_update.connect(self._on_analysis)
@@ -51,8 +58,6 @@ class MainWindow(QMainWindow):
         self.engine_handler.start_engine()
 
         self.humanizer = Humanizer(self.config)
-
-        self.sound_manager = SoundManager()
 
         self.analyzing_fen: str | None = None
         self.position_version: int = 0
@@ -69,6 +74,11 @@ class MainWindow(QMainWindow):
         self._multi_pv: dict[int, dict] = {}
         self._multi_pv_depth: int = 0
         self._human_move_selected: chess.Move | None = None
+        self._eval_seen: bool = False
+        self._game_result_recorded = False
+        self._game_result_fen: str | None = None
+        self.move_uci_history: list[str] = []
+        self._previewing = False
 
         self._heartbeat = QTimer()
         self._heartbeat.timeout.connect(self._heartbeat_check)
@@ -89,76 +99,113 @@ class MainWindow(QMainWindow):
 
     def _setup_menubar(self) -> None:
         menubar = self.menuBar()
-        file_menu = QMenu("File", self)
-        export_action = QAction("Export PGN", self)
-        export_action.setShortcut(QKeySequence("Ctrl+E"))
-        export_action.triggered.connect(self._export_pgn)
-        file_menu.addAction(export_action)
-        import_action = QAction("Import PGN", self)
-        import_action.setShortcut(QKeySequence("Ctrl+I"))
-        import_action.triggered.connect(self._import_pgn)
-        file_menu.addAction(import_action)
-        file_menu.addSeparator()
+        view_menu = QMenu("View", self)
+        self.pin_action = QAction("Always on Top", self)
+        self.pin_action.setShortcut(QKeySequence("Ctrl+T"))
+        self.pin_action.setCheckable(True)
+        settings = QSettings("ChessCoach", "MainWindow")
+        pinned = bool(settings.value("alwaysOnTop", False, type=bool))
+        self.pin_action.setChecked(pinned)
+        self.pin_action.triggered.connect(self._toggle_pin)
+        view_menu.addAction(self.pin_action)
+        view_menu.addSeparator()
         analysis_action = QAction("Analysis Board", self)
         analysis_action.setShortcut(QKeySequence("Ctrl+A"))
         analysis_action.triggered.connect(self._analysis_board)
-        file_menu.addAction(analysis_action)
-        file_menu.addSeparator()
+        view_menu.addAction(analysis_action)
         new_action = QAction("New Game", self)
         new_action.setShortcut(QKeySequence("Ctrl+N"))
         new_action.triggered.connect(self._new_game)
-        file_menu.addAction(new_action)
-        menubar.addMenu(file_menu)
+        view_menu.addAction(new_action)
+        menubar.addMenu(view_menu)
+        # NOTE: never touch window flags here — the native window does not
+        # exist yet. Desired state applies on first show (see showEvent).
 
-    def _export_pgn(self) -> None:
-        path, _ = QFileDialog.getSaveFileName(
-            self, "Export PGN", "", "PGN Files (*.pgn);;All Files (*)"
-        )
-        if not path:
-            return
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
         try:
-            pgn = board_to_pgn(self.board)
-            with open(path, "w", encoding="utf-8") as f:
-                f.write(pgn)
-            self.statusBar().showMessage(f"PGN exported: {os.path.basename(path)}")
-        except Exception as e:
-            logger.error(f"PGN export error: {e}")
-            QMessageBox.warning(self, "Export Error", str(e))
+            if self.pin_action.isChecked():
+                self._apply_pin(True)
+        except Exception:
+            logger.warning("Pin apply on show failed", exc_info=True)
 
-    def _import_pgn(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(
-            self, "Import PGN", "", "PGN Files (*.pgn);;All Files (*)"
-        )
-        if not path:
-            return
+    def _apply_pin(self, on: bool) -> None:
+        # Recreation-free pinning (the old setWindowFlag+show path destroyed
+        # the native window on Windows: black flashes + intermittent crash).
+        #   Windows: SetWindowPos TOPMOST/NOTOPMOST only. No flags, no show().
+        #   Other OS: Qt flag; show() only to re-apply when already visible.
+        # The checkbox always ends in sync with what actually applied.
+        applied = False
         try:
-            with open(path, "r", encoding="utf-8") as f:
-                pgn = f.read()
-            moves = pgn_to_moves(pgn)
-            self.board.reset()
-            self.redo_stack.clear()
-            self.position_version += 1
-            self.analysis_received = False
-            self.last_known_move = None
-            self.move_list.clear()
-            for move in moves:
-                if move in self.board.legal_moves:
-                    san = self.board.san(move)
-                    self.board.push(move)
-                    mn = (len(self.board.move_stack) + 1) // 2
-                    turn = "W" if self.board.turn == chess.BLACK else "B"
-                    suffix = (
-                        "#" if self.board.is_checkmate() else "+" if self.board.is_check() else ""
-                    )
-                    self.move_list.addItem(f"{mn}{turn}  {san}{suffix}")
-            self.chess_board.set_board(self.board)
-            self._update_feedback()
-            self.statusBar().showMessage(
-                f"PGN imported: {os.path.basename(path)} ({len(moves)} moves)"
+            if os.name == "nt":
+                try:
+                    hwnd = int(self.winId())  # ensure handle exists, no recreate
+                except Exception:
+                    hwnd = 0
+                applied = self._set_topmost_native(on, hwnd) if hwnd else False
+                if not applied:
+                    logger.warning("Pin unchanged: native call failed")
+            else:
+                was_visible = self.isVisible()
+                self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, on)
+                if was_visible:
+                    self.show()
+                applied = True
+        except Exception:
+            logger.warning("Pin apply failed", exc_info=True)
+            applied = False
+        try:
+            self.pin_action.setChecked(bool(applied and on))
+            QSettings("ChessCoach", "MainWindow").setValue("alwaysOnTop", bool(applied and on))
+            self.statusBar().showMessage("Pinned on top" if (applied and on) else "Unpinned", 2000)
+        except Exception:
+            pass
+
+    def _toggle_pin(self, checked: bool) -> None:
+        # All state sync (checkbox, settings, status) lives in _apply_pin.
+        self._apply_pin(checked)
+
+    @staticmethod
+    def _set_topmost_native(on: bool, hwnd: int) -> bool:
+        if os.name != "nt" or not hwnd:
+            return False
+        try:
+            import ctypes
+            from ctypes import wintypes
+
+            user32 = ctypes.windll.user32
+            user32.SetWindowPos.argtypes = [
+                wintypes.HWND,
+                wintypes.HWND,
+                ctypes.c_int,
+                ctypes.c_int,
+                ctypes.c_int,
+                ctypes.c_int,
+                ctypes.c_uint,
+            ]
+            user32.SetWindowPos.restype = wintypes.BOOL
+            HWND_TOPMOST = -1
+            HWND_NOTOPMOST = -2
+            SWP_NOMOVE = 0x0002
+            SWP_NOSIZE = 0x0001
+            SWP_NOACTIVATE = 0x0010
+            res = user32.SetWindowPos(
+                hwnd,
+                HWND_TOPMOST if on else HWND_NOTOPMOST,
+                0,
+                0,
+                0,
+                0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
             )
-        except Exception as e:
-            logger.error(f"PGN import error: {e}")
-            QMessageBox.warning(self, "Import Error", str(e))
+            if not res:
+                err = ctypes.windll.kernel32.GetLastError()
+                logger.warning("SetWindowPos failed, err=%s", err)
+                return False
+            return True
+        except Exception:
+            logger.warning("Native pin failed", exc_info=True)
+            return False
 
     def _setup_ui(self) -> None:
         self._setup_menubar()
@@ -180,7 +227,6 @@ class MainWindow(QMainWindow):
         self.chess_board.playable_side = None
         self.chess_board.set_board(self.board)
         self.chess_board.move_made.connect(self._on_move)
-        self.chess_board.move_made.connect(lambda _: self.sound_manager.play_move())
         layout.addWidget(self.chess_board, stretch=3)
 
         self.dashboard = CoachDashboard()
@@ -206,6 +252,23 @@ class MainWindow(QMainWindow):
 
         self.dashboard.layout().addLayout(btn_row)  # type: ignore[attr-defined]
 
+        mode_row = QHBoxLayout()
+        mode_row.setSpacing(6)
+        self.mode_buttons: dict[str, QPushButton] = {}
+        for key, label in (
+            ("human", "Human-like"),
+            ("must_win", "Must Win"),
+            ("safe", "Safe"),
+        ):
+            b = QPushButton(label)
+            b.setCheckable(True)
+            b.setStyleSheet(self._btn_style())
+            b.clicked.connect(lambda _checked=False, m=key: self._set_mode(m))
+            mode_row.addWidget(b)
+            self.mode_buttons[key] = b
+        self.dashboard.layout().addLayout(mode_row)  # type: ignore[attr-defined]
+        self._refresh_mode_buttons()
+
         s5 = QLabel("MOVE HISTORY")
         s5.setObjectName("section")
         self.dashboard.layout().addWidget(s5)
@@ -230,6 +293,13 @@ class MainWindow(QMainWindow):
             }
         """)
         self.move_list.setAlternatingRowColors(True)
+        # Cap history height: an unbounded QListWidget minimum forces the
+        # whole row taller than short screens, clipping the board bottom.
+        self.move_list.setMaximumHeight(140)
+        # Smooth per-pixel scrolling (touchpads/touch feel broken on the
+        # default per-item mode) + click-to-preview any history position.
+        self.move_list.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
+        self.move_list.itemClicked.connect(self._preview_history_move)
         self.dashboard.layout().addWidget(self.move_list, stretch=2)  # type: ignore[call-arg]
 
         QShortcut(QKeySequence("Ctrl+Z"), self).activated.connect(self._undo)
@@ -244,6 +314,21 @@ class MainWindow(QMainWindow):
             }}
         """)
         self.statusBar().showMessage("Ready")
+
+    def _refresh_mode_buttons(self) -> None:
+        current = self.humanizer.mode
+        for key, btn in self.mode_buttons.items():
+            btn.setChecked(key == current)
+
+    def _set_mode(self, mode: str) -> None:
+        """Switch coach mode mid-game; takes effect on the next analysis."""
+        self.humanizer.set_mode(mode)
+        self._refresh_mode_buttons()
+        # Discard the previous mode's selection so fresh analysis applies it.
+        self._human_move_selected = None
+        self._multi_pv = {}
+        self.statusBar().showMessage(f"Mode: {mode}", 2000)
+        self._update_feedback()
 
     def _btn_style(self) -> str:
         return f"""
@@ -280,6 +365,9 @@ class MainWindow(QMainWindow):
         """
 
     def _on_move(self, move: chess.Move) -> None:
+        # Batch all widget changes into ONE repaint (kills move flicker).
+        self._previewing = False
+        self.setUpdatesEnabled(False)
         try:
             self.prev_eval = self.current_eval
             self.engine_handler.stop_analysis()
@@ -295,6 +383,9 @@ class MainWindow(QMainWindow):
             self.analysis_received = False
             self.last_known_move = None
             self.redo_stack.clear()
+            self.move_uci_history.append(move.uci())
+            self._game_result_recorded = False
+            self._game_result_fen = None
 
             move_num = (len(self.board.move_stack) + 1) // 2
             turn = "W" if self.board.turn == chess.BLACK else "B"
@@ -307,31 +398,55 @@ class MainWindow(QMainWindow):
             self._update_feedback()
         except Exception as e:
             logger.error(f"Move error: {e}")
+        finally:
+            self.setUpdatesEnabled(True)
+            self.chess_board.update()
+            self.update()
 
     def _undo(self) -> None:
         if not self.board.move_stack:
             return
+        if self.chess_board._pending_move:
+            return  # animation in flight — its move_made owns the board
+        self._previewing = False
+        self.setUpdatesEnabled(False)
         try:
             self.engine_handler.stop_analysis()
             if self.move_list.count() == 0:
                 return
-            item = self.move_list.takeItem(self.move_list.count() - 1)
-            san_text = item.text() if item else ""
-            move = self.board.pop()
-            self.redo_stack.append((move, san_text))
+            move = self.board.peek()
+            try:
+                san_only = self.board.san(move)
+            except Exception:
+                san_only = move.uci()
+            self.move_list.takeItem(self.move_list.count() - 1)
+            self.board.pop()
+            self.redo_stack.append((move, san_only))
+            if self.move_uci_history:
+                self.move_uci_history.pop()
             self.position_version += 1
             self.analysis_received = False
             self.last_known_move = None
             self.has_prev_eval = False
+            # NOTE: result flags NOT reset — replays of the same terminal
+            # via redo must not double-count; a genuinely new move re-arms.
 
             self.chess_board.set_board(self.board)
             self._update_feedback()
         except Exception as e:
             logger.error(f"Undo error: {e}")
+        finally:
+            self.setUpdatesEnabled(True)
+            self.chess_board.update()
+            self.update()
 
     def _redo(self) -> None:
         if not self.redo_stack:
             return
+        if self.chess_board._pending_move:
+            return
+        self._previewing = False
+        self.setUpdatesEnabled(False)
         try:
             self.engine_handler.stop_analysis()
             move, san_text = self.redo_stack.pop()
@@ -342,7 +457,11 @@ class MainWindow(QMainWindow):
                 except Exception:
                     san_text = move.uci()
 
+            if move not in self.board.legal_moves:
+                self.redo_stack.append((move, san_text))
+                return
             self.board.push(move)
+            self.move_uci_history.append(move.uci())
             self.position_version += 1
             self.analysis_received = False
             self.last_known_move = None
@@ -358,6 +477,44 @@ class MainWindow(QMainWindow):
             self._update_feedback()
         except Exception as e:
             logger.error(f"Redo error: {e}")
+        finally:
+            self.setUpdatesEnabled(True)
+            self.chess_board.update()
+            self.update()
+
+    def _preview_history_move(self, item) -> None:
+        """Click a history row to VIEW that position (game state untouched).
+
+        Rebuilds from scratch and replays UCI so the preview can never
+        desync. Any live action (move/undo/redo/new/analysis-board) calls
+        set_board(self.board) and returns to the live game automatically.
+        """
+        try:
+            row = self.move_list.row(item)
+            if row < 0 or row >= len(self.move_uci_history):
+                return
+            if row == len(self.move_uci_history) - 1:
+                # Latest row = live position.
+                self._previewing = False
+                self.chess_board.set_board(self.board)
+                self._update_feedback()
+                return
+            preview = chess.Board()
+            for uci in self.move_uci_history[: row + 1]:
+                move = chess.Move.from_uci(uci)
+                if move not in preview.legal_moves:
+                    return
+                preview.push(move)
+            self.engine_handler.stop_analysis()
+            self._previewing = True
+            self.chess_board.set_board(preview, clear_arrow=True)
+            self.statusBar().showMessage(
+                f"Viewing move {row + 1}/{len(self.move_uci_history)}"
+                " — move/undo/redo/new returns LIVE",
+                5000,
+            )
+        except Exception as e:
+            logger.error(f"Preview error: {e}")
 
     def _reset_dashboard(self, feedback_text: str = "") -> None:
         self.dashboard.lbl_eval.setText("0.00")
@@ -394,15 +551,26 @@ class MainWindow(QMainWindow):
         except ValueError:
             QMessageBox.warning(self, "Invalid FEN", "The entered FEN is not valid.")
             return
+        if self.chess_board._pending_move:
+            return
+        self._previewing = False
         self.engine_handler.stop_analysis()
         self.board = new_board
         self.redo_stack.clear()
+        self.move_uci_history.clear()
+        self._game_result_recorded = False
+        self._game_result_fen = None
         self.position_version += 1
         self.analysis_received = False
         self.last_known_move = None
+        self._multi_pv = {}
+        self._multi_pv_depth = 0
+        self._human_move_selected = None
+        self.chess_board.set_best_move(None)
         self.current_eval = 0.0
         self.prev_eval = 0.0
         self.has_prev_eval = False
+        self._eval_seen = False
         self.move_list.clear()
         self._reset_dashboard("Analysis position set")
         self.chess_board.playable_side = None
@@ -411,9 +579,12 @@ class MainWindow(QMainWindow):
 
     def _new_game(self) -> None:
         try:
+            if self.chess_board._pending_move:
+                return  # animation in flight — don't strand it
             color = self._select_color()
             if color is None:
-                return
+                return  # Cancel: leave the current game untouched
+            self._previewing = False
             self.user_color = color
             self.board_flipped = self.user_color == chess.BLACK
             self.dashboard.set_eval_bar_gradient(self.board_flipped)
@@ -421,6 +592,7 @@ class MainWindow(QMainWindow):
             self.engine_handler.stop_analysis()
             self.board.reset()
             self.redo_stack.clear()
+            self.move_uci_history.clear()
             self.position_version += 1
             self.analysis_received = False
             self.last_known_move = None
@@ -430,7 +602,12 @@ class MainWindow(QMainWindow):
             self.move_list.clear()
             self._reset_dashboard("New game started")
             self.humanizer.new_game()
+            self._refresh_mode_buttons()
+            self._multi_pv = {}
+            self._multi_pv_depth = 0
+            self._human_move_selected = None
             self._game_result_recorded = False
+            self._game_result_fen = None
             self.chess_board.set_flipped(self.board_flipped)
             self.chess_board.playable_side = None
             self.chess_board.set_board(self.board)
@@ -447,6 +624,21 @@ class MainWindow(QMainWindow):
         self.engine_handler.start_analysis(self.board.copy())
 
     def _update_turn_display(self) -> None:
+        # Change-gated: identical setText/setStyleSheet 20×/sec still repaints.
+        key = (
+            self.board.turn,
+            self.board.is_checkmate(),
+            self.board.is_stalemate(),
+            self.board.is_insufficient_material(),
+            self.board.is_fifty_moves(),
+            self.board.can_claim_draw(),
+            self.board.is_check(),
+            len(self.board.move_stack),
+            self.user_color,
+        )
+        if key == getattr(self, "_turn_key", None):
+            return
+        self._turn_key = key
         dash = self.dashboard
         turn_name = "White" if self.board.turn == chess.WHITE else "Black"
         if self.board.is_checkmate():
@@ -505,12 +697,12 @@ class MainWindow(QMainWindow):
     def can_show_coach(self) -> bool:
         if self.board.is_game_over():
             return False
-        if self.board.is_fifty_moves() or self.board.can_claim_draw():
-            return False
         return self.board.turn == self.user_color
 
     def _on_analysis(self, info: dict) -> None:
         try:
+            if self._previewing:
+                return  # history preview: never paint live analysis onto it
             if self.analyzing_version_id != self.position_version:
                 return
             if self.analyzing_fen and self.analyzing_fen != self.board.fen():
@@ -528,6 +720,22 @@ class MainWindow(QMainWindow):
             if pv and len(pv) > 0:
                 self._multi_pv[multipv_num] = info
 
+            score = info.get("score")
+            if not score:
+                return
+
+            if multipv_num != 1:
+                return
+
+            # Throttle EVERYTHING visual below (humanizer + labels + board +
+            # eval): engine streams dozens of infos/sec and each one used to
+            # repaint the board and rewrite labels — that storm fought drag
+            # paints and read as flicker. Data accumulation above stays live.
+            now = time.time()
+            if (now - self._last_ui_update) * 1000 < self._ui_throttle_ms:
+                return
+            self._last_ui_update = now
+
             multi_pv_list = [
                 self._multi_pv[k] for k in sorted(self._multi_pv) if self._multi_pv[k].get("pv")
             ]
@@ -536,7 +744,11 @@ class MainWindow(QMainWindow):
                 eval_score = 0.0
                 scores = multi_pv_list[0].get("score")
                 if scores:
-                    eval_score = abs(scores.relative.score(mate_score=10000)) / 100.0
+                    try:
+                        cp_val = scores.relative.score(mate_score=10000)
+                        eval_score = abs(cp_val) / 100.0 if cp_val is not None else 10.0
+                    except Exception:
+                        eval_score = 10.0
                 human_move = self.humanizer.select_move(
                     multi_pv_list,
                     self.board,
@@ -548,11 +760,18 @@ class MainWindow(QMainWindow):
 
             if self._human_move_selected:
                 self.last_known_move = self._human_move_selected
-                self.chess_board.set_best_move(self._human_move_selected)
-                self.dashboard.lbl_best.setText(self._human_move_selected.uci())
+                # Change-gated: re-setting the SAME arrow/labels 20×/sec
+                # repaints the board and churns the dashboard for nothing —
+                # that storm fights drag paints and reads as flicker.
+                if self.chess_board.best_move != self._human_move_selected:
+                    self.chess_board.set_best_move(self._human_move_selected)
+                self._set_label_text(self.dashboard.lbl_best, self._human_move_selected.uci())
                 pv_line = self._multi_pv.get(1, {}).get("pv", pv or [])
                 if pv_line:
-                    self.dashboard.lbl_pv.setText("Line: " + " ".join(m.uci() for m in pv_line[:4]))
+                    self._set_label_text(
+                        self.dashboard.lbl_pv,
+                        "Line: " + " ".join(m.uci() for m in pv_line[:4]),
+                    )
 
             score = info.get("score")
             if not score:
@@ -561,15 +780,11 @@ class MainWindow(QMainWindow):
             if multipv_num != 1:
                 return
 
-            now = time.time()
-            if (now - self._last_ui_update) * 1000 < self._ui_throttle_ms:
-                return
-            self._last_ui_update = now
-
             dash = self.dashboard
             cur_eval: float = 0.0
             val: float = 0.0
             text = "0.00"
+            mate = 0
 
             if score.is_mate():
                 mate = score.relative.mate() or 0
@@ -585,35 +800,38 @@ class MainWindow(QMainWindow):
             user_eval = cur_eval if self.user_color != chess.BLACK else -cur_eval
             user_val = val if self.user_color != chess.BLACK else -val
             self.current_eval = cur_eval
-            if self.user_color is not None:
+            if self._eval_seen and self.user_color is not None:
                 self.has_prev_eval = True
+            self._eval_seen = True
 
-            dash.lbl_engine.setText(f"Depth {depth}  |  {info.get('seldepth', depth)}")
+            self._set_label_text(
+                dash.lbl_engine, f"Depth {depth}  |  {info.get('seldepth', depth)}"
+            )
 
             eval_color = (
                 COLORS["green"]
                 if user_eval > 0.3
                 else COLORS["red"] if user_eval < -0.3 else COLORS["text"]
             )
-            dash.lbl_eval.setStyleSheet(
-                f"color: {eval_color}; font-size: 26px; font-weight: bold; font-family: 'Segoe UI', monospace;"
-            )
-            dash.lbl_eval.setText(text)
+            new_style = f"color: {eval_color}; font-size: 26px; font-weight: bold; font-family: 'Segoe UI', monospace;"
+            if dash.lbl_eval.text() != text or dash.lbl_eval.styleSheet() != new_style:
+                dash.lbl_eval.setStyleSheet(new_style)
+                dash.lbl_eval.setText(text)
 
             if score.is_mate():
                 if mate > 0:
-                    dash.lbl_advantage.setText("White can mate")
+                    self._set_label_text(dash.lbl_advantage, "White can mate")
                     dash.lbl_advantage.setStyleSheet(
                         f"color: {COLORS['green']}; font-size: 10px; font-weight: bold;"
                     )
                 else:
-                    dash.lbl_advantage.setText("Black can mate")
+                    self._set_label_text(dash.lbl_advantage, "Black can mate")
                     dash.lbl_advantage.setStyleSheet(
                         f"color: {COLORS['red']}; font-size: 10px; font-weight: bold;"
                     )
             else:
                 adv, adv_color = self._eval_text(user_eval)
-                dash.lbl_advantage.setText(adv)
+                self._set_label_text(dash.lbl_advantage, adv)
                 dash.lbl_advantage.setStyleSheet(
                     f"color: {adv_color}; font-size: 10px; font-weight: bold;"
                 )
@@ -624,25 +842,28 @@ class MainWindow(QMainWindow):
             self._update_turn_display()
 
             if not self.can_show_coach():
-                self.chess_board.set_best_move(None)
+                if self.chess_board.best_move is not None:
+                    self.chess_board.set_best_move(None)
+                self._set_label_text(self.dashboard.lbl_best, "-")
+                self._set_label_text(self.dashboard.lbl_pv, "")
                 return
 
             if self.board.is_checkmate():
                 self.engine_handler.stop_analysis()
-                dash.lbl_feedback.setText("CHECKMATE! Game over.")
-                dash.lbl_feedback.setStyleSheet(
+                self._set_feedback(
+                    "CHECKMATE! Game over.",
                     f"color: {COLORS['green']}; padding: 10px; font-weight: bold;"
-                    f"border: 2px solid {COLORS['green']}; border-radius: 4px;"
+                    f"border: 2px solid {COLORS['green']}; border-radius: 4px;",
                 )
                 self.analysis_received = True
                 return
 
             if score.is_mate():
-                dash.lbl_pv.setText("")
-                dash.lbl_feedback.setText(f"Forced mate in {abs(mate)} moves")
-                dash.lbl_feedback.setStyleSheet(
+                self._set_label_text(dash.lbl_pv, "")
+                self._set_feedback(
+                    f"Forced mate in {abs(mate)} moves",
                     f"color: {COLORS['green']}; padding: 10px;"
-                    f"border: 1px solid {COLORS['green']}; border-radius: 4px;"
+                    f"border: 1px solid {COLORS['green']}; border-radius: 4px;",
                 )
                 self.analysis_received = True
                 return
@@ -655,43 +876,60 @@ class MainWindow(QMainWindow):
                 if delta < -1.0:
                     feedback = "BLUNDER! You lost advantage this move"
                     feed_color = COLORS["red"]
-                    dash.lbl_feedback.setStyleSheet(
+                    self._set_feedback(
+                        feedback,
                         f"color: {COLORS['red']}; padding: 10px; font-weight: bold;"
-                        f"border: 1px solid {COLORS['red']}; border-radius: 4px;"
+                        f"border: 1px solid {COLORS['red']}; border-radius: 4px;",
                     )
+                    return
                 elif delta > 1.0:
                     feedback = "MISS! Opponent blundered — you missed a chance!"
                     feed_color = COLORS["yellow"]
-                    dash.lbl_feedback.setStyleSheet(
+                    self._set_feedback(
+                        feedback,
                         f"color: {COLORS['yellow']}; padding: 10px; font-weight: bold;"
-                        f"border: 1px solid {COLORS['yellow']}; border-radius: 4px;"
+                        f"border: 1px solid {COLORS['yellow']}; border-radius: 4px;",
                     )
-                else:
-                    dash.lbl_feedback.setStyleSheet(
-                        f"color: {feed_color}; padding: 10px;"
-                        f"background: {COLORS['bg']};"
-                        f"border: 1px solid {COLORS['border']}; border-radius: 4px;"
-                    )
-            else:
-                dash.lbl_feedback.setStyleSheet(
-                    f"color: {feed_color}; padding: 10px;"
-                    f"background: {COLORS['bg']};"
-                    f"border: 1px solid {COLORS['border']}; border-radius: 4px;"
-                )
-
-            dash.lbl_feedback.setText(feedback)
+                    return
+            self._set_feedback(
+                feedback,
+                f"color: {feed_color}; padding: 10px;"
+                f"background: {COLORS['bg']};"
+                f"border: 1px solid {COLORS['border']}; border-radius: 4px;",
+            )
 
         except Exception as e:
             logger.error(f"Analysis error: {e}")
 
+    @staticmethod
+    def _set_label_text(label, text: str) -> None:
+        """setText only on real change — identical setText still repaints."""
+        try:
+            if label.text() != text:
+                label.setText(text)
+        except Exception:
+            label.setText(text)
+
+    def _set_feedback(self, text: str, style: str) -> None:
+        """Feedback text+style only on real change (restyle relayouts)."""
+        dash = self.dashboard
+        try:
+            if dash.lbl_feedback.text() == text:
+                return
+        except Exception:
+            pass
+        dash.lbl_feedback.setStyleSheet(style)
+        dash.lbl_feedback.setText(text)
+
     def _eval_text(self, user_eval: float) -> tuple[str, str]:
+        # Thresholds mirror server._coach_label (0.5/0.3) — one scale everywhere.
         if user_eval > 0.5:
             return "You are winning", COLORS["green"]
-        if user_eval > 0.2:
+        if user_eval > 0.3:
             return "You are better", COLORS["green"]
         if user_eval < -0.5:
             return "Opponent is winning", COLORS["red"]
-        if user_eval < -0.2:
+        if user_eval < -0.3:
             return "Opponent is better", COLORS["red"]
         return "Equal", COLORS["text_dim"]
 
@@ -709,24 +947,25 @@ class MainWindow(QMainWindow):
     def _update_feedback(self) -> None:
         dash = self.dashboard
         self._update_turn_display()
-        if self.board.is_game_over() or self.board.is_fifty_moves() or self.board.can_claim_draw():
+        # Only AUTOMATIC terminations end the game. 50-move / threefold are
+        # claimable (FIDE 9.2/9.3) — play continues, coach keeps coaching.
+        if self.board.is_game_over():
             self.engine_handler.stop_analysis()
             self.last_known_move = None
             self.chess_board.set_best_move(None)
             dash.lbl_best.setText("-")
             dash.lbl_pv.setText("")
-            if not getattr(self, "_game_result_recorded", False):
+            if self._game_result_fen != self.board.fen():
                 if self.board.is_checkmate():
                     won = self.board.turn != self.user_color
                     result = "win" if won else "loss"
                 else:
                     result = "draw"
-                from chess_coach.humanizer import _accuracy_for_elo
-
                 self.humanizer.record_result(
                     result, _accuracy_for_elo(self.humanizer.effective_elo)
                 )
                 self._game_result_recorded = True
+                self._game_result_fen = self.board.fen()
             if self.board.is_checkmate():
                 winner = "Black" if self.board.turn == chess.WHITE else "White"
                 dash.lbl_feedback.setText(f"Game over! {winner} wins by checkmate.")
@@ -764,7 +1003,10 @@ class MainWindow(QMainWindow):
             dash.lbl_best.setText("-")
             dash.lbl_pv.setText("")
             tn = "White" if self.board.turn == chess.WHITE else "Black"
-            dash.lbl_feedback.setText(f"Waiting — {tn}'s turn to play")
+            note = f"Waiting — {tn}'s turn to play"
+            if self.board.is_fifty_moves() or self.board.can_claim_draw():
+                note += " (draw available — claim or play on)"
+            dash.lbl_feedback.setText(note)
             dash.lbl_feedback.setStyleSheet(
                 f"color: {COLORS['text']}; padding: 10px;"
                 f"background: {COLORS['bg']};"
@@ -781,6 +1023,8 @@ class MainWindow(QMainWindow):
             self.dashboard.lbl_opening.setText("—")
 
     def _heartbeat_check(self) -> None:
+        if self._previewing:
+            return  # history preview: don't restart live analysis over it
         if self.board.is_game_over() or self.board.is_fifty_moves():
             return
         if not self.can_show_coach():
@@ -802,9 +1046,26 @@ class MainWindow(QMainWindow):
                 self.run_analysis()
 
     def _on_engine_error(self, msg: str) -> None:
-        QMessageBox.warning(self, "Engine Error", msg)
+        # Modal per failure spams a loop when the engine is dead — show once,
+        # then downgrade to the status bar.
+        if not self._engine_error_shown:
+            self._engine_error_shown = True
+            QMessageBox.warning(self, "Engine Error", msg)
+        else:
+            self.statusBar().showMessage(f"Engine: {msg}", 5000)
 
     def closeEvent(self, event: QCloseEvent | None) -> None:
         self._heartbeat.stop()
+        # Stop the worker FIRST and wait for it out of engine.analysis()
+        # before quit(): quit-while-analyzing hangs/crashes.
+        try:
+            self.engine_handler.stop_analysis()
+            self.engine_handler.pending_board = None
+            th = self.engine_handler.analysis_thread
+            if th is not None and th.isRunning():
+                th.wait(3000)
+        except Exception:
+            pass
         self.engine_handler.stop_engine()
-        event.accept()
+        if event is not None:
+            event.accept()

@@ -51,7 +51,7 @@ class TestLoadConfig:
         assert isinstance(engine["path"], str)
         assert isinstance(engine["threads"], int)
         assert isinstance(engine["hash"], int)
-        assert isinstance(engine["movetime"], int)
+        assert "movetime" not in engine  # removed in v0.1.1 (use web_movetime)
         assert isinstance(engine["web_movetime"], (int, float))
 
     def test_missing_engine_fallback(self, tmp_path: Path):
@@ -66,9 +66,13 @@ class TestLoadConfig:
         result = load_config(temp_config)
         assert result == sample_config
 
+    def test_env_engine_override(self, temp_config: Path, monkeypatch):
+        monkeypatch.setenv("CHESS_COACH_ENGINE", "/app/stockfish")
+        cfg = load_config(str(temp_config))
+        assert cfg["engine"]["path"] == "/app/stockfish"
+
     def test_display_opacity_invalid_type(self, tmp_path: Path):
         p = tmp_path / "bad_opacity.yaml"
-        import yaml
 
         cfg = {
             "engine": {"path": "sf", "threads": 2, "hash": 64},
@@ -86,7 +90,6 @@ class TestLoadConfig:
 
     def test_display_opacity_bool_rejected(self, tmp_path: Path):
         p = tmp_path / "bool_opacity.yaml"
-        import yaml
 
         cfg = {
             "engine": {"path": "sf", "threads": 2, "hash": 64},
@@ -104,7 +107,6 @@ class TestLoadConfig:
 
     def test_display_color_invalid_type(self, tmp_path: Path):
         p = tmp_path / "bad_color.yaml"
-        import yaml
 
         cfg = {
             "engine": {"path": "sf", "threads": 2, "hash": 64},

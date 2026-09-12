@@ -1,5 +1,8 @@
 name: CI
 
+permissions:
+  contents: read
+
 on:
   push:
     branches: [main]
@@ -62,6 +65,6 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: pip install bandit pip-audit
+      - run: pip install bandit==1.8.3 pip-audit==2.9.0
       - run: bandit -r src/chess_coach -ll -s B311,B104,B404,B110
       - run: pip-audit

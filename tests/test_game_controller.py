@@ -58,13 +58,13 @@ class TestGameController:
     def test_record_move_increments_move_number(self, game_controller: GameController):
         game_controller.start_game(True)
         game_controller.human_move("e2e4")
-        game_controller.human_move("e7e5")
+        game_controller.copy_opponent_move("e7e5")
         assert game_controller.move_number == 2
 
     def test_new_game_starts_again(self, game_controller: GameController):
         game_controller.start_game(True)
         game_controller.human_move("e2e4")
-        game_controller.human_move("e7e5")
+        game_controller.copy_opponent_move("e7e5")
         game_controller.start_game(False)
         assert game_controller.human_side == chess.BLACK
         assert len(game_controller.board.move_stack) == 0
@@ -72,11 +72,22 @@ class TestGameController:
     def test_detect_checkmate(self, game_controller: GameController):
         game_controller.start_game(True)
         game_controller.human_move("f2f3")
-        game_controller.human_move("e7e5")
+        game_controller.copy_opponent_move("e7e5")
         game_controller.human_move("g2g4")
-        game_controller.human_move("d8h4")
+        game_controller.copy_opponent_move("d8h4")
         assert game_controller.board.is_checkmate()
         assert game_controller.game_phase == GamePhase.GAME_OVER
+
+    def test_human_cannot_play_opponent_turn(self, game_controller: GameController):
+        game_controller.start_game(True)
+        game_controller.human_move("e2e4")
+        err = game_controller.human_move("e7e5")
+        assert err == "Not your turn — enter opponent move as copy"
+        assert game_controller.copy_opponent_move("e7e5") is None
+
+    def test_opponent_copy_rejected_on_human_turn(self, game_controller: GameController):
+        game_controller.start_game(True)
+        assert game_controller.copy_opponent_move("e2e4") == "Not opponent turn"
 
 
 class TestUndoRedo:
@@ -124,7 +135,7 @@ class TestUndoRedo:
     def test_redo_clears_cache(self, game_controller: GameController):
         game_controller.start_game(True)
         game_controller.human_move("e2e4")
-        game_controller.human_move("e7e5")
+        game_controller.copy_opponent_move("e7e5")
         game_controller.undo()
         game_controller.redo()
         assert game_controller.cached_coach is None
@@ -133,9 +144,9 @@ class TestUndoRedo:
     def test_undo_after_game_over_returns_to_playing(self, game_controller: GameController):
         game_controller.start_game(True)
         game_controller.human_move("f2f3")
-        game_controller.human_move("e7e5")
+        game_controller.copy_opponent_move("e7e5")
         game_controller.human_move("g2g4")
-        game_controller.human_move("d8h4")
+        game_controller.copy_opponent_move("d8h4")
         assert game_controller.game_phase == GamePhase.GAME_OVER
         game_controller.undo()
         assert game_controller.game_phase == GamePhase.PLAYING

@@ -24,8 +24,8 @@ class CoachDashboard(QFrame):
         self._anim_timer = QTimer(self)
         self._anim_timer.timeout.connect(self._animate_eval_bar)
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(10, 12, 10, 12)
-        layout.setSpacing(8)
+        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setSpacing(5)
 
         heading = QLabel("BOARD")
         heading.setObjectName("heading")
@@ -173,7 +173,7 @@ class CoachDashboard(QFrame):
                     stop:0 rgba(13,17,23,0.9), stop:1 rgba(22,27,34,0.7));
                 border: 1px solid rgba(48,54,61,0.4);
                 border-radius: 4px;
-                min-height: 50px;
+                min-height: 36px;
             }}
         """
 
@@ -184,8 +184,12 @@ class CoachDashboard(QFrame):
         """
 
     def set_eval_bar_value(self, value: int) -> None:
+        value = max(0, min(2000, value))
+        # Same target re-set 20×/sec would restart the animation pointlessly.
+        if value == self._anim_target_val and self._anim_timer.isActive():
+            return
         self._anim_start_val = self.eval_bar.value()
-        self._anim_target_val = max(0, min(2000, value))
+        self._anim_target_val = value
         self._anim_progress = 0.0
         self._anim_elapsed.start()
         self._anim_timer.start(16)

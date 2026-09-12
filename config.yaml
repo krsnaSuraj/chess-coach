@@ -2,13 +2,13 @@ engine:
   path: "stockfish.exe"
   threads: 2
   hash: 64
-  movetime: 2000
   web_movetime: 2.0
   multipv: 5
 
 humanizer:
   enabled: true
   target_elo: 1500
+  mode: "human"  # human | must_win | safe
   error_injection:
     inaccuracy_rate: 0.10
     mistake_rate: 0.03

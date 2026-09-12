@@ -10,7 +10,6 @@ from chess.engine import InfoDict
 @dataclass
 class PvLine:
     move: chess.Move
-    centipawns: float
     mate: int | None
     rank: int
 
@@ -26,6 +25,10 @@ class SessionMetrics:
 
     def record_game(self, accuracy: float, result: str) -> None:
         self.games.append(accuracy)
+        # Bound long-lived server memory: rolling window, average stays exact
+        # over it (avg recomputed from the window).
+        if len(self.games) > 500:
+            del self.games[:-500]
         self.games_played += 1
         self.avg_accuracy = sum(self.games) / len(self.games)
         if result == "win":
@@ -84,31 +87,34 @@ def _top3_cumulative_for_elo(elo: float) -> float:
     return 0.92
 
 
-def _expected_score(elo_a: float, elo_b: float) -> float:
-    return 1.0 / (1.0 + 10.0 ** ((elo_b - elo_a) / 400.0))  # type: ignore[no-any-return]
-
-
 class Humanizer:
+    VALID_MODES = ("human", "must_win", "safe")
+
     def __init__(self, config: dict) -> None:
         hc = config.get("humanizer", {})
         self.enabled: bool = hc.get("enabled", True)
         self.target_elo: int = hc.get("target_elo", 1500)
+        self.mode: str = str(hc.get("mode", "human")).lower()
+        if self.mode not in self.VALID_MODES:
+            self.mode = "human"
 
         ei = hc.get("error_injection", {})
         self.inaccuracy_rate: float = ei.get("inaccuracy_rate", 0.10)
         self.mistake_rate: float = ei.get("mistake_rate", 0.03)
         self.blunder_rate: float = ei.get("blunder_rate", 0.005)
 
-        self._move_count: int = 0
         self._session = SessionMetrics()
-        self._games_played: int = 0
         self._progressive_elo: float = float(self.target_elo)
         self._effective_elo: float = float(self.target_elo)
 
-    def new_game(self) -> None:
-        self._move_count = 0
-        self._games_played += 1
+    def set_mode(self, mode: str | None) -> None:
+        if not mode:
+            return
+        m = str(mode).lower()
+        if m in self.VALID_MODES:
+            self.mode = m
 
+    def new_game(self) -> None:
         climb = random.randint(20, 50)
         if random.random() < 0.15:
             dip = -random.randint(30, 100)
@@ -120,6 +126,8 @@ class Humanizer:
             float(self.target_elo) + 500,
             self._progressive_elo + climb,
         )
+        # Sync effective until first select_move jitter (keeps property meaningful pre-move)
+        self._effective_elo = self._progressive_elo
 
     def select_move(
         self,
@@ -139,12 +147,16 @@ class Humanizer:
         if not candidates:
             return None
 
-        # never miss forced mate in 1 — strongest anti-detection signal
+        # must_win: always engine best, never inject error (play-to-win mode)
+        if self.mode == "must_win":
+            return candidates[0].move
+
+        # never miss forced mate in 1 — strongest anti-detection signal.
+        # Only force OUR mate: candidate mate must be from side-to-move POV positive.
         for c in candidates:
-            if c.mate is not None and c.mate == 1:
+            if c.mate is not None and c.mate == 1 and c.move in board.legal_moves:
                 return c.move
 
-        self._move_count += 1
         self._effective_elo = self._progressive_elo + random.randint(-30, 30)
 
         if is_complex:
@@ -156,6 +168,12 @@ class Humanizer:
         effective_inaccuracy = self.inaccuracy_rate
         effective_mistake = self.mistake_rate
         effective_blunder = self.blunder_rate
+
+        if self.mode == "safe":
+            # Safe/draw-safe: halve all errors, never blunder
+            effective_inaccuracy *= 0.5
+            effective_mistake *= 0.5
+            effective_blunder = 0.0
 
         if is_complex:
             effective_inaccuracy *= 1.6
@@ -174,16 +192,12 @@ class Humanizer:
             if not pv:
                 continue
             score = info.get("score")
-            cp = 0.0
             mate = None
             if score:
-                cp_val = score.relative.score(mate_score=10000)
                 mate = score.relative.mate()
-                cp = cp_val if cp_val is not None else 0.0
             ranked.append(
                 PvLine(
                     move=pv[0],
-                    centipawns=cp,
                     mate=mate,
                     rank=i + 1,
                 )
@@ -238,28 +252,35 @@ class Humanizer:
 
     def _human_blunder(self, candidates: list[PvLine], board: chess.Board) -> chess.Move | None:
         legal = list(board.legal_moves)
+        if not legal:
+            return candidates[0].move if candidates else None
         blunders: list[chess.Move] = []
         for move in legal:
             board_copy = board.copy()
             board_copy.push(move)
             if board_copy.is_checkmate():
                 continue
-            # hanging piece: moved piece lands on square attacked by opponent and not a capture escape
+            # hanging piece: moved piece lands on square attacked by opponent,
+            # and the landing square is NOT defended by us (true hang, not sac)
             to_sq = move.to_square
-            if not board.is_capture(move) and board_copy.is_attacked_by(board_copy.turn, to_sq):
-                blunders.append(move)
-                continue
-            # also consider captures that lose material (piece count drops without check)
+            if not board.is_capture(move):
+                attacked = board_copy.is_attacked_by(board_copy.turn, to_sq)
+                defended = board_copy.is_attacked_by(not board_copy.turn, to_sq)
+                if attacked and not defended:
+                    blunders.append(move)
+                    continue
+            # captures that lose material without giving check — sac without compensation
             pieces_after = len(board_copy.piece_map())
             pieces_before = len(board.piece_map())
             if pieces_after < pieces_before and not board_copy.is_check():
-                # sacrifice without check — likely blunder
                 blunders.append(move)
         if blunders:
             return random.choice(blunders)
         if len(candidates) >= 2:
             return candidates[-1].move
-        return random.choice(legal)
+        if legal:
+            return random.choice(legal)
+        return candidates[0].move if candidates else None
 
     def _accuracy_weighted_select(
         self, candidates: list[PvLine], board: chess.Board
@@ -312,36 +333,10 @@ class Humanizer:
 
     @property
     def effective_elo(self) -> float:
-        return self._progressive_elo
+        return self._effective_elo
 
     def record_result(self, result: str, estimated_accuracy: float = 0.0) -> None:
         self._session.record_game(estimated_accuracy, result)
-
-    def get_risk_assessment(self) -> dict:
-        accuracy = self._session.avg_accuracy
-        expected = _accuracy_for_elo(self._progressive_elo)
-        deviation = accuracy - expected
-        coherence = self._session.coherence_score()
-
-        if deviation > 0.12 or coherence > 0.95:
-            level = "CRITICAL"
-        elif deviation > 0.08 or coherence > 0.85:
-            level = "WARNING"
-        elif deviation > 0.04 or coherence > 0.70:
-            level = "CAUTION"
-        else:
-            level = "SAFE"
-
-        return {
-            "level": level,
-            "deviation": round(deviation, 4),
-            "accuracy": round(accuracy, 4),
-            "expected": round(expected, 4),
-            "coherence": round(coherence, 4),
-            "games": self._session.games_played,
-            "effective_elo": round(self._progressive_elo),
-            "win_rate": round(self._session.win_rate(), 3),
-        }
 
 
 class ComplexityDetector:
@@ -367,9 +362,3 @@ class ComplexityDetector:
             return True
         checks = sum(1 for m in board.legal_moves if board.gives_check(m))
         return checks >= 5
-
-    @staticmethod
-    def is_time_pressure(remaining_seconds: float | None = None) -> bool:
-        if remaining_seconds is not None:
-            return remaining_seconds < 60.0
-        return random.random() > 0.7

@@ -35,7 +35,13 @@ class EngineHandler(QObject):
 
     def _restart_engine(self) -> None:
         try:
+            old = self.engine
             self.engine = None
+            if old is not None:
+                try:
+                    old.quit()
+                except Exception:
+                    pass
             self.start_engine()
         except Exception as e:
             self.error_occurred.emit(str(e))

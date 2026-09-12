@@ -20,14 +20,10 @@ _PIECE_TYPES: list[int] = [
 class PromotionDialog(QDialog):
     def __init__(self, color: chess.Color, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Promotion")
+        self.setWindowTitle("Promote to…")
         self.setModal(True)
-        self.setFixedSize(320, 88)
-        self.setWindowFlags(
-            Qt.WindowType.Dialog
-            | Qt.WindowType.FramelessWindowHint
-            | Qt.WindowType.WindowStaysOnTopHint
-        )
+        self.setFixedSize(320, 140)
+        self.setWindowFlags(Qt.WindowType.Dialog | Qt.WindowType.FramelessWindowHint)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.selected_piece: int = chess.QUEEN
         self._setup_ui(color)
@@ -51,6 +47,9 @@ class PromotionDialog(QDialog):
             if not pix.isNull():
                 btn.setIcon(QIcon(pix))
                 btn.setIconSize(QSize(56, 56))
+            else:
+                # Text fallback so missing PNGs never yield blank buttons.
+                btn.setText(names[pt])
             btn.setFixedSize(72, 72)
             btn.setStyleSheet("""
                 QPushButton {
@@ -65,6 +64,20 @@ class PromotionDialog(QDialog):
             """)
             btn.clicked.connect(lambda checked, t=pt: self._select(t))
             layout.addWidget(btn, 0, i)
+
+        cancel = QPushButton("Cancel", self)
+        cancel.setStyleSheet("""
+            QPushButton {
+                background-color: #161b22;
+                color: #f0f6fc;
+                border: 1px solid #30363d;
+                border-radius: 6px;
+                padding: 6px;
+            }
+            QPushButton:hover { border-color: #58a6ff; }
+        """)
+        cancel.clicked.connect(self.reject)
+        layout.addWidget(cancel, 1, 0, 1, 4)
 
     def _select(self, piece_type: int) -> None:
         self.selected_piece = piece_type

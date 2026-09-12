@@ -2,10 +2,15 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
+from unittest.mock import MagicMock, patch
 
+import chess
+import chess.engine
 import pytest
 import yaml
+from fastapi.testclient import TestClient
 
+from chess_coach import server
 from chess_coach.game_controller import GameController
 
 
@@ -16,7 +21,6 @@ def sample_config() -> dict[str, Any]:
             "path": "stockfish.exe",
             "threads": 2,
             "hash": 64,
-            "movetime": 2000,
             "web_movetime": 0.15,
         },
         "display": {
@@ -47,15 +51,30 @@ def game_controller() -> GameController:
 
 
 @pytest.fixture
-def sample_pgn() -> str:
-    return (
-        '[Event "Test Game"]\n'
-        '[Site "?"]\n'
-        '[Date "2026.05.27"]\n'
-        '[Round "?"]\n'
-        '[White "?"]\n'
-        '[Black "?"]\n'
-        '[Result "*"]\n'
-        "\n"
-        "1. e4 e5 2. Nf3 Nc6 3. Bb5 *\n"
-    )
+def mock_engine() -> MagicMock:
+    """Fake Stockfish: fast Cp(39) startpos-like analysis, no binary needed."""
+    engine = MagicMock()
+    engine.analyse.return_value = [
+        {
+            "pv": [chess.Move.from_uci("e2e4"), chess.Move.from_uci("e7e5")],
+            "score": chess.engine.PovScore(chess.engine.Cp(39), chess.WHITE),
+            "depth": 18,
+        },
+        {
+            "pv": [chess.Move.from_uci("d2d4")],
+            "score": chess.engine.PovScore(chess.engine.Cp(20), chess.WHITE),
+            "depth": 18,
+        },
+    ]
+    return engine
+
+
+@pytest.fixture
+def client(mock_engine: MagicMock):
+    """TestClient with fresh global server state per test."""
+    server.game_controller = GameController()
+    server._move_history = []
+    server._reset_for_tests()
+    with patch.object(server, "get_engine", return_value=mock_engine):
+        with TestClient(server.app) as c:
+            yield c

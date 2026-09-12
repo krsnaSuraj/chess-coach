@@ -1,0 +1,23 @@
+# Keep the build context lean: never bake the venv, engine, or history.
+.venv/
+venv/
+env/
+.git/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+stockfish.exe
+stockfish
+server.log
+*.log
+*.pid
+.env
+.DS_Store
+Thumbs.db
+.playwright-mcp/
+screenshots/

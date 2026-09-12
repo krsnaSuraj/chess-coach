@@ -27,6 +27,9 @@ class TestEcoDatabase:
             assert key not in seen, f"Duplicate: {entry[0]} {entry[2]}"
             seen.add(key)
 
+    def test_database_count_pinned(self) -> None:
+        assert len(ECO_DATABASE) == 509
+
 
 class TestGetOpening:
     def test_no_moves_returns_none(self) -> None:

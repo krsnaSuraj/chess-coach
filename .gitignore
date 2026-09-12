@@ -46,6 +46,15 @@ htmlcov/
 
 # Logs
 *.log
+*.pid
+server.pid
+
+# Databases
+*.sqlite3
+*.db
+
+# Coverage
+coverage.xml
 
 # Command Code
 .commandcode/

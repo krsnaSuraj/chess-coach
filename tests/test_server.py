@@ -2,42 +2,11 @@ from __future__ import annotations
 
 import chess
 import chess.engine
-import pytest
 from fastapi.testclient import TestClient
 from unittest.mock import MagicMock, patch
 
 from chess_coach import server
 from chess_coach.game_controller import GameController
-
-
-@pytest.fixture
-def client():
-    # reset global state
-    server.game_controller = GameController()
-    server._analysis_cache.clear()
-    server._web_result_recorded = False
-    # mock engine to avoid needing stockfish binary
-    mock_engine = MagicMock()
-    mock_score = MagicMock()
-    mock_score.relative.score.return_value = 39
-    mock_score.relative.mate.return_value = None
-    mock_score.relative.score.return_value = 39
-    # mock analyse return
-    mock_engine.analyse.return_value = [
-        {
-            "pv": [chess.Move.from_uci("e2e4"), chess.Move.from_uci("e7e5")],
-            "score": chess.engine.PovScore(chess.engine.Cp(39), chess.WHITE),
-            "depth": 18,
-        },
-        {
-            "pv": [chess.Move.from_uci("d2d4")],
-            "score": chess.engine.PovScore(chess.engine.Cp(20), chess.WHITE),
-            "depth": 18,
-        },
-    ]
-    with patch.object(server, "get_engine", return_value=mock_engine):
-        with TestClient(server.app) as c:
-            yield c
 
 
 class TestHealth:
@@ -96,8 +65,9 @@ class TestHumanMove:
         # Instead test that promotion param doesn't crash via rstrip fix
         # Send promotion with base move a7a8 -> should try to be illegal but not crash
         r = client.post("/api/human_move", json={"move_uci": "a7a8", "promotion": "q"})
-        # should be illegal (no pawn there) but not 500
+        # illegal here (no pawn there) but a clean ok:false, never 500
         assert r.status_code == 200
+        assert r.json()["ok"] is False
 
 
 class TestUndoRedo:
@@ -119,6 +89,7 @@ class TestUndoRedo:
     def test_undo_no_game(self):
         # fresh controller awaiting_color
         server.game_controller = GameController()
+        server._move_history = []
         with patch.object(server, "get_engine", return_value=MagicMock()):
             with TestClient(server.app) as c:
                 r = c.post("/api/undo", json={})
@@ -126,11 +97,14 @@ class TestUndoRedo:
 
 
 class TestGameStateCache:
-    def test_cache_hit(self, client):
+    def test_cache_hit(self, client, mock_engine):
         client.post("/api/start_game", json={"human_is_white": True})
         r1 = client.get("/api/game_state")
+        calls_after_first = mock_engine.analyse.call_count
+        assert calls_after_first == 1
         r2 = client.get("/api/game_state")
-        # second call should be cached, same best_move
+        # second call served from cache: no new analysis, same best_move
+        assert mock_engine.analyse.call_count == calls_after_first
         assert r1.json()["coach"]["best_move"] == r2.json()["coach"]["best_move"]
 
     def test_game_over_no_coach(self, client):
